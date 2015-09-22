@@ -1,0 +1,7 @@
+Magyarország helységnévtára:
+  http://www.ksh.hu/apps/hntr.egyeb?p_lang=HU&p_sablon=LETOLTES
+  http://www.ksh.hu/docs/helysegnevtar/hnt_letoltes_2015.xls
+
+settlements.csv:
+  pip install -t . xlrd
+  python org_name_search/settlements.py
