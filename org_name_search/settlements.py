@@ -21,13 +21,13 @@ def import_ksh_settlements(xlsfilename, output_csv):
         # skip empty row at the end
         .selecttrue(0)
         .convert(0, 'lower')
-        .tocsv(output_csv))
+        .tocsv(output_csv, encoding='utf-8'))
 
 
 def read_settlements(csvsource):
     return set(
         petl
-        .fromcsv(csvsource)
+        .fromcsv(csvsource, encoding='utf-8', errors='strict')
         .convert(0, 'lower')
         .flatten())
 

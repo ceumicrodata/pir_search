@@ -47,7 +47,7 @@ def format_set(set):
 def main():
     pirnev = (
         petl
-        .fromcsv('data/PIRNEV.csv')
+        .fromcsv('data/PIRNEV.csv', encoding='utf-8', errors='strict')
         .convert('TZSAZON_ID', int)
         .sort('TZSAZON_ID'))
 

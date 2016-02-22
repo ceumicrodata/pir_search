@@ -152,7 +152,7 @@ def parse_args(argv, version):
     description = '''
         Identify organizations by name (and optionally by settlement)
         in the input CSV and write a CSV extended with the found information
-        (e.g. PIR, canonical name, settlement and a score that can be used 
+        (e.g. PIR, canonical name, settlement and a score that can be used
         for deciding if it is a real match or not)'''
 
     parser = argparse.ArgumentParser(
@@ -238,7 +238,7 @@ def main(argv, version, org_data_path='data'):
     args = parse_args(argv, version)
     input_fields = InputFields.from_args(args)
     output_fields = OutputFields.from_args(args)
-    input = petl.fromcsv(args.input_csv, encoding='utf-8')
+    input = petl.fromcsv(args.input_csv, encoding='utf-8', errors='strict')
     parser = Parser()
     parser.read_csv('data/settlements.csv', report_conflicts=False)
 

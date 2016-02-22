@@ -22,7 +22,7 @@ PirDetails = collections.namedtuple('PirDetails', 'names settlements')
 
 def load_pir_details(path='data'):
     def read(csv_file):
-        return petl.fromcsv(data.csv_open(os.path.join(path, csv_file)))
+        return petl.fromcsv(data.csv_open(path + '/' + csv_file), encoding='utf-8', errors='strict')
 
     tzsazon = (
         read('TZSAZON.csv')
