@@ -17,7 +17,7 @@ from .settlements import SettlementMap  # read_settlements, make_settlement_vari
 from . import tagger
 from . import data
 
-PirDetails = collections.namedtuple('PirDetails', 'names settlements')
+PirDetails = collections.namedtuple('PirDetails', 'names settlements tax_id pir')
 
 
 def load_pir_details(path='data'):
@@ -28,17 +28,32 @@ def load_pir_details(path='data'):
         read('TZSAZON.csv')
         .cut('TZSAZON_ID', 'PIR')
         .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('PIR', int, failonerror=True))
+        .convert('PIR', int, failonerror=True)
+        .data())
     tzsazon_id_to_pir = {tzsazon_id: pir for tzsazon_id, pir in tzsazon}
 
-    pir_to_details = collections.defaultdict(lambda: PirDetails(set(), set()))
+
+    ado = set(
+        read('ADO.csv')
+        .cut('TZSAZON_ID', 'ADOSZAM')
+        .convert('TZSAZON_ID', int, failonerror=True)
+        .convert('ADOSZAM', lambda adoszam: adoszam[:8], failonerror=True)
+        .data())
+    assert len(ado) == len({tzsazon for tzsazon, _ in ado}), 'BAD input: one PIR multiple tax id'
+    ado = dict(ado)
+
+    pir_to_details = {
+        pir: new_details(tax_id=ado.get(tzsazon), pir=pir)
+        for tzsazon, pir in tzsazon_id_to_pir.items()
+    }
 
     cim = (
         read('CIM.csv')
         .cut('TZSAZON_ID', 'CTELEP')
         .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('CTELEP', 'lower'))
-    for tzsazon, telep in cim.data():
+        .convert('CTELEP', 'lower')
+        .data())
+    for tzsazon, telep in cim:
         if telep:
             pir = tzsazon_id_to_pir[tzsazon]
             pir_to_details[pir].settlements.add(telep)
@@ -47,8 +62,9 @@ def load_pir_details(path='data'):
         read('PIRNEV.csv')
         .cut('TZSAZON_ID', 'NEV')
         .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('NEV', 'lower'))
-    for tzsazon, nev in pirnev.data():
+        .convert('NEV', 'lower')
+        .data())
+    for tzsazon, nev in pirnev:
         pir = tzsazon_id_to_pir[tzsazon]
         pir_to_details[pir].names.add(nev)
 
@@ -129,9 +145,8 @@ class Query:
 
 @functools.total_ordering
 class SearchResult:
-    def __init__(self, query, pir, details, err):
+    def __init__(self, query, details, err):
         self.query_text = query.name
-        self.pir = pir
         self.details = details
         self.err = err
         self.score, self.match_text, self.settlement = self._score_best(query, details)
@@ -156,6 +171,14 @@ class SearchResult:
     __repr__ = __str__ = __unicode__
 
 
+def new_details(names=None, settlements=None, pir=None, tax_id=None):
+    return PirDetails(
+        names=names or set(),
+        settlements=settlements or set(),
+        pir=pir,
+        tax_id=tax_id)
+
+
 @functools.total_ordering
 class NoResult:
 
@@ -168,7 +191,7 @@ class NoResult:
     # diagnostic
     err = 0
     key = None
-    details = PirDetails(set(), set())
+    details = new_details()
 
     def __lt__(self, other):
         return other is not self
@@ -211,7 +234,7 @@ class ErodedIndex:
         err, pirs = self._search_parsed(*query.parsed)
         return sorted(
             (
-                SearchResult(query, pir=pir, details=self.pir_to_details[pir], err=err)
+                SearchResult(query, details=self.pir_to_details[pir], err=err)
                 for pir in pirs),
             reverse=True)[:max_results]
 

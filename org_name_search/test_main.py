@@ -15,7 +15,7 @@ from unittest import TestCase
 
 from .index import PirDetails, ErodedIndex, Parser
 
-VERSION = '0.0.1-alpha'
+VERSION = '0.0.1-test'
 
 
 class TempFile:
@@ -51,6 +51,7 @@ class Test_with_files(TestCase):
     def test_runs(self):
         with TempFile() as output_csv:
             input_csv = 'test_data/input.csv'
+
             argv = ['--no-progress', 'szervezet', input_csv, output_csv]
             m.main(argv, VERSION, 'test_data')
 
@@ -72,6 +73,15 @@ class Test_with_files(TestCase):
 
             self.assertEquals('101010', records_to_dict(read_csv(output_csv))[2]['pir'])
 
+    def test_taxids(self):
+        with TempFile() as output_csv:
+            input_csv = 'test_data/input.csv'
+
+            argv = ['--no-progress', 'szervezet', input_csv, output_csv]
+            m.main(argv, VERSION, 'test_data')
+
+            self.assertEquals('taxid__3', records_to_dict(read_csv(output_csv))[2]['pir_taxid'])
+
 
 class OrgNameMatcher(m.OrgNameMatcher):
 
@@ -80,7 +90,7 @@ class OrgNameMatcher(m.OrgNameMatcher):
 
 find_matches = OrgNameMatcher.run
 INPUT_FIELDS = m.InputFields('org_name', 'settlement')
-OUTPUT_FIELDS = m.OutputFields('pir', 'pir_name', 'pir_score', 'pir_settlement')
+OUTPUT_FIELDS = m.OutputFields('pir', 'pir_name', 'pir_score', 'pir_settlement', 'taxid')
 PI_R = '31415926'
 BADPI_R = '30104'
 TATA_PI_R = PI_R + '1414'
@@ -107,11 +117,17 @@ class Test_functionality(TestCase):
     def pir_to_details(self):
         return {
             NONMATCH:
-                PirDetails(names={'xy'}, settlements=set()),
+                PirDetails(
+                    names={'xy'},
+                    settlements=set(),
+                    pir=NONMATCH,
+                    tax_id='nonmatch'),
             TATA_PI_R:
                 PirDetails(
                     names={'megévesztő minisztérium'},
-                    settlements={'tata'}),
+                    settlements={'tata'},
+                    pir=TATA_PI_R,
+                    tax_id='tata_taxid'),
             PI_R:
                 PirDetails(
                     names={
@@ -119,14 +135,31 @@ class Test_functionality(TestCase):
                         'megévesztő minisztérium',
                         'megvesztő minisztérium',
                         },
-                    settlements={'budapest'}),
+                    settlements={'budapest'},
+                    pir=PI_R,
+                    tax_id='taxid!'),
         }
 
     def test_best_one_is_selected_from_multiple_matches(self):
         pir_to_details = {
-            NONMATCH: PirDetails(names={'xy'}, settlements=set()),
-            BADPI_R:  PirDetails(names={'megvesztő minisztérium'}, settlements={'budapest'}),
-            PI_R:     PirDetails(names={'megévesztő minisztérium'}, settlements={'budapest'}),
+            NONMATCH:
+                PirDetails(
+                    names={'xy'},
+                    settlements=set(),
+                    pir=NONMATCH,
+                    tax_id='nonmatch'),
+            BADPI_R:
+                PirDetails(
+                    names={'megvesztő minisztérium'},
+                    settlements={'budapest'},
+                    pir=BADPI_R,
+                    tax_id='bad'),
+            PI_R:
+                PirDetails(
+                    names={'megévesztő minisztérium'},
+                    settlements={'budapest'},
+                    pir=PI_R,
+                    tax_id='taxid!'),
         }
         match = find1('megtévesztő minisztérium', '', pir_to_details)
         self.assertEquals(PI_R, match[OUTPUT_FIELDS.pir])
@@ -154,16 +187,27 @@ class Test_functionality(TestCase):
 
     def test_within_equal_matches_the_one_with_less_words_removed_wins(self):
         pir_to_details = {
-            NONMATCH: PirDetails(names={'xy'}, settlements=set()),
-            BADPI_R:  PirDetails(
-                names={'megtévesztő minisztérium átverési aligazgatósága'},
-                settlements={'budapest'}),
-            PI_R:     PirDetails(
-                names={
-                    'megtévesztő minisztérium',
-                    'megévesztő minisztérium',
-                    },
-                settlements={'budapest'}),
+            NONMATCH:
+                PirDetails(
+                    names={'xy'},
+                    settlements=set(),
+                    pir=NONMATCH,
+                    tax_id='nonmatch'),
+            BADPI_R:
+                PirDetails(
+                    names={'megtévesztő minisztérium átverési aligazgatósága'},
+                    settlements={'budapest'},
+                    pir=BADPI_R,
+                    tax_id='bad'),
+            PI_R:
+                PirDetails(
+                    names={
+                        'megtévesztő minisztérium',
+                        'megévesztő minisztérium',
+                        },
+                    settlements={'budapest'},
+                    pir=PI_R,
+                    tax_id='taxid!'),
         }
         match = find1('megtévesztő minisztérium', 'budapest', pir_to_details)
         self.assertEquals('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])

@@ -26,11 +26,12 @@ class InputFields:
 
 
 class OutputFields:
-    def __init__(self, pir, pir_name, score, settlement):
+    def __init__(self, pir, pir_name, score, settlement, tax_id):
         self.pir = pir
         self.pir_name = pir_name
         self.pir_score = score
         self.pir_settlement = settlement
+        self.tax_id = tax_id
 
     @classmethod
     def from_args(cls, args):
@@ -38,11 +39,12 @@ class OutputFields:
             args.pir_field,
             args.pir_name_field,
             args.pir_score_field,
-            args.pir_settlement_field)
+            args.pir_settlement_field,
+            args.taxid_field)
 
     @property
     def as_set(self):
-        return {self.pir, self.pir_name, self.pir_score, self.pir_settlement}
+        return {self.pir, self.pir_name, self.pir_score, self.pir_settlement, self.tax_id}
 
 
 def field_name(base, i):
@@ -119,12 +121,17 @@ class OrgNameMatcher:
                     lambda row: _get_match(row, i).score)
 
                 .addfield(
+                    field_name(self.output_fields.pir, i),
+                    lambda row: _get_match(row, i).details.pir)
+
+                .addfield(
+                    field_name(self.output_fields.tax_id, i),
+                    lambda row: _get_match(row, i).details.tax_id)
+
+                .addfield(
                     field_name(self.output_fields.pir_name, i),
                     lambda row: _get_match(row, i).match_text)
 
-                .addfield(
-                    field_name(self.output_fields.pir, i),
-                    lambda row: _get_match(row, i).pir)
             )
             if self.output_fields.pir_settlement:
                 output = output.addfield(
@@ -192,18 +199,20 @@ def parse_args(argv, version):
 
     parser.add_argument(
         '--name', dest='pir_name_field', default='pir_name',
-        help=(
-            '''
-            output field for the best matching name
-            (default: %(default)s)
-            '''))
+        help='''
+            output field for the best matching name (default: %(default)s)''')
 
     parser.add_argument(
         '--pir-settlement', dest='pir_settlement_field',
         default='pir_settlement',
-        help=(
-            '''output field name for pir settlement
-            (default: %(default)s)'''))
+        help='''
+            output field name for pir settlement (default: %(default)s)''')
+
+    parser.add_argument(
+        '--taxid', dest='taxid_field',
+        default='pir_taxid',
+        help='''
+            output field name for tax id (default: %(default)s)''')
 
     parser.add_argument(
         '--no-progress', dest='progress', default=True, action='store_false',
