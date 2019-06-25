@@ -24,4 +24,4 @@ class Test(TestCase):
     def test_ngram_text(self):
         name1 = u'DUNA\xdaJV\xc1ROSI F\u0150ISKOLA'
         name2 = u'duna\xfajv\xe1rosi f\u0151iskola'
-        self.assertEquals(m.ngram_text(name1.lower(), 1), m.ngram_text(name2, 1))
+        self.assertEquals(m.union_ngrams(name1.lower(), 1), m.union_ngrams(name2, 1))
