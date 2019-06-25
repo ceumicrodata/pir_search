@@ -71,7 +71,7 @@ def no_log(*args):
     pass
 
 
-class SequentialWordDropper:
+class _SequentialWordDropper:
 
     def __init__(self, text):
         self._words = WORD.finditer(text)
@@ -116,7 +116,7 @@ def find_keywords(pattern, text, log=no_log):
 
     Returns keywords and remaining text.
     '''
-    swd = SequentialWordDropper(text)
+    swd = _SequentialWordDropper(text)
     keywords = set()
     for match in pattern.finditer(text):
         keywords.update(match.keys)

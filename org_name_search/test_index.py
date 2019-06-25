@@ -17,7 +17,7 @@ class Test(TestCase):
         name2 = u'duna\xfajv\xe1rosi f\u0151iskola'
         self.assertEquals(name1.lower(), name2)
 
-        parse = m.Parser().parse
+        parse = m.OrgNameParser().parse
         q = m.Query(name1, settlement=None, parse=parse)
         self.assertGreater(q.similarity(name2, u'duna\xfajv\xe1ros'), 0.8)
 

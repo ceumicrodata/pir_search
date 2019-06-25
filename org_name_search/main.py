@@ -12,7 +12,7 @@ import sys
 import petl
 from petl.io.sources import FileSource
 
-from .index import ErodedIndex, Parser, Query, NoResult, load_pir_details
+from .index import ErodedIndex, OrgNameParser, Query, NoResult, load_pir_details
 
 
 class InputFields:
@@ -248,7 +248,7 @@ def main(argv, version, org_data_path='data'):
     input_fields = InputFields.from_args(args)
     output_fields = OutputFields.from_args(args)
     input = petl.fromcsv(args.input_csv, encoding='utf-8', errors='strict')
-    parser = Parser()
+    parser = OrgNameParser()
     parser.read_csv('data/settlements.csv', report_conflicts=False)
 
     matches = find_matches(

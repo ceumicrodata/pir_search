@@ -13,7 +13,7 @@ import tempfile
 
 from unittest import TestCase
 
-from .index import PirDetails, ErodedIndex, Parser
+from .index import PirDetails, ErodedIndex, OrgNameParser
 
 VERSION = '0.0.1-test'
 
@@ -105,7 +105,7 @@ def find1(org_name, org_settlement, pir_to_details, input_fields=INPUT_FIELDS, o
             ['id', input_fields.org_name, input_fields.settlement],
             [1, org_name, org_settlement],
         ])
-    parser = Parser()
+    parser = OrgNameParser()
     parser.build(settlements, report_conflicts=True)
     matches = find_matches(input, input_fields, output_fields, pir_to_details, parser.parse)
     return records_to_dict(matches)[1]

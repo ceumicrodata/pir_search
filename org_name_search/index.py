@@ -71,7 +71,7 @@ def load_pir_details(path='data'):
     return dict(pir_to_details)
 
 
-class Parser(SettlementMap):
+class OrgNameParser(SettlementMap):
 
     def parse(self, org_name):
         normalized_name = normalize(org_name)
