@@ -138,32 +138,25 @@ def timed(f):
     return timed
 
 
-def _ngrams(text, n=3, max_errors=1):
+def ngrams(text, n=3):
     """
     Generate sequence of ngrams for text.
-
-    The input is padded with spaces before/after the text.
-    When max_errors > 0, variants, that has this many insertions/deletions are also produced.
     """
-    padding = ' ' * (n - 1)
-    padding = ' '
-    padded = padding + text + padding
-    for i in range(len(padded) - n + 1):
-        # for j in range(max(0, i - max_errors), i + max_errors + 1):
-        #     yield j, padded[i:i+n]
-        yield padded[i:i+n]
+    return set(text[i:i+n] for i in range(len(text) - n + 1))
 
 
 # @timed
-def union_ngrams(text, max_errors):
+def union_ngrams(text, n=3):
     """
     Generate set of ngrams for words in text.
-
-    When max_errors > 0, also generate ngrams, that has this many deletions/insertions before each generated ngram.
     """
     text_ngrams = set()
     for word in simplify_accents(normalize(text)).split():
-        text_ngrams |= set(_ngrams(word, max_errors=max_errors))
+        word_ngrams = set(ngrams(word, n))
+        padded = f' {word} '
+        word_ngrams.add(padded[:n+1])
+        word_ngrams.add(padded[-n-1:])
+        text_ngrams |= word_ngrams
     return text_ngrams
 
 
@@ -172,12 +165,11 @@ def union_ngrams(text, max_errors):
 # FIXME: details -> pir_details
 
 class Query:
-    def __init__(self, name, settlement, parse, max_errors=2):
+    def __init__(self, name, settlement, parse):
         self.name = name
         self.settlement = settlement
         self.parse = parse
-        self.max_errors = max_errors
-        self.name_ngrams = union_ngrams(name, self.max_errors) | (union_ngrams(settlement, max_errors) if settlement else set())
+        self.name_ngrams = union_ngrams(name) | (union_ngrams(settlement) if settlement else set())
 
     @property
     def parsed(self):
@@ -193,8 +185,8 @@ class Query:
         # see https://www.geogebra.org/3d on positive (x, y) values, with these formulas:
         # a(x,y)= 1 - (x^3 + y^3 + (x*y)^3/10)/(20^3)
         # eq1:IntersectPath(xOyPlane,a)
-        similarity = 1 - ((diff12 ** exp_diff + diff21 ** exp_diff + (diff12 * diff21) ** 3 / 10) / union ** exp_union)
-        # similarity = 1 - ((diff12 ** exp_diff + diff21 ** exp_diff + (diff12 * diff21) ** 2) / union ** exp_union)
+        # similarity = 1 - ((diff12 ** exp_diff + diff21 ** exp_diff + (diff12 * diff21) ** 3 / 10) / union ** exp_union)
+        similarity = 1 - ((diff12 ** exp_diff + diff21 ** exp_diff + (diff12 * diff21) ** 2) / union ** exp_union)
         return max(0, similarity)
 
     # @timed
@@ -202,13 +194,15 @@ class Query:
         if not self.name:
             return 0
 
-        match_ngrams = union_ngrams(match, self.max_errors)
+        match_ngrams = union_ngrams(match)
         base_score = self._similarity(self.name_ngrams, match_ngrams)
         if not settlement:
             return base_score
 
-        settlement_ngrams = union_ngrams(settlement, self.max_errors)
+        settlement_ngrams = union_ngrams(settlement)
         extended_score = self._similarity(self.name_ngrams, match_ngrams | settlement_ngrams)
+        # base_score = len(match_ngrams & self.name_ngrams)
+        # extended_score = len((match_ngrams | settlement_ngrams) & self.name_ngrams)
         return max(base_score, extended_score)
 
     def __unicode__(self):
@@ -286,10 +280,9 @@ NoResult = NoResult()
 MISSING = '*'
 
 class ErodedIndex:
-    def __init__(self, pir_to_details, parse, max_errors=2):
-        NGramIndex(pir_to_details, parse, max_errors)
+    def __init__(self, pir_to_details, parse):
         self.parse = parse
-        self.max_errors = max_errors
+        max_errors = 2
         self.pir_to_details = pir_to_details
         self.index = collections.defaultdict(set)
 
@@ -297,7 +290,7 @@ class ErodedIndex:
             for name in details.names:
                 settlements, tags, rest = parse(name)
                 for err, eroded in self.hashes(settlements | details.settlements, tags, rest):
-                    if err <= self.max_errors:
+                    if err <= max_errors:
                         self.index[eroded].add((err, pir))
         self.index = dict(self.index)
 
@@ -328,11 +321,38 @@ class ErodedIndex:
         return err, pirs
 
 
+@functools.total_ordering
+class NGramSearchResult:
+    # @timed
+    def __init__(self, query, details, score, index):
+        self.query_text = query.name
+        self.details = details
+        self.err = 0
+        self.score = score
+        self.match_text = index.select(query.name_ngrams, details.names)
+        if query.settlement in details.settlements:
+            self.settlement = query.settlement
+        else:
+            self.settlement = index.select(query.name_ngrams, details.settlements)
+
+    def __lt__(self, other):
+        return (
+            (self.err > other.err) or
+            (self.err == other.err and self.score < other.score))
+
+    def __eq__(self, other):
+        return (self.err, self.score) == (other.err, other.score)
+
+    def __unicode__(self):
+        return 'NGramSearchResult({!r}, {!r}, {!r})'.format(self.match_text, self.settlement, self.score)
+
+    __repr__ = __str__ = __unicode__
+
+
 class NGramIndex:
     # @timed
-    def __init__(self, pir_to_details, parse, max_errors=2):
+    def __init__(self, pir_to_details, parse):
         self.parse = parse
-        self.max_errors = max_errors
         self.pir_to_details = pir_to_details
         self.index = collections.defaultdict(set)  # ngram -> set(pirs)
         self.ngram_counts = collections.Counter()
@@ -340,7 +360,7 @@ class NGramIndex:
         def detail_ngrams(pir_details):
             text = ' '.join(pir_details.names) + ' ' + ' '.join(pir_details.settlements)
             text = ' '.join(sorted(set(text.split())))
-            return union_ngrams(text, max_errors=0)
+            return union_ngrams(text)
         for pir, pir_details in self.pir_to_details.items():
             ngrams = detail_ngrams(pir_details)
             for ngram in ngrams:
@@ -348,31 +368,67 @@ class NGramIndex:
             self.ngram_counts.update(ngrams)
         self.index = dict(self.index)
 
-        print(len(self.index))
+        print(f"NGramIndex: total ngrams = {len(self.index)}")
 
-    @timed
+    # @timed
     def search(self, query, max_results=10):
+        @contextlib.contextmanager
+        def timing(_):
+            yield
+
         # pir_score = pir -> sum(tfidf(ngram) for ngram in query_ngrams)
         with timing('tfidf'):
             pir_score = collections.defaultdict(float)
+            pir_ngrams = collections.defaultdict(int)
             for ngram in query.name_ngrams:
                 freq = self.ngram_counts[ngram]
                 pirs = self.index.get(ngram, ())
                 # simplification: tf in tfidf is 1.0 (ignore ngram repetition)
-                # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
+                # divide by max(freq, num) to lower the impact of very rare, potentially bogus ngrams
                 tfidf = 1.0 / max(freq, 15)
+                # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
                 for pir in pirs:
                     pir_score[pir] += tfidf
+                    pir_ngrams[pir] += 1
+
+        # features to use for deciding on match quality (much later, when evaluating matches - if there is any at all):
+        #  - tfidf of ngrams
+        #  - length of query - in number of ngrams
 
         # pirs with highest scores
         with timing('select results'):
-            print(f'{len(pir_score)}')
-            pirs = {pir for score, pir in sorted([(score, pir) for (pir, score) in pir_score.items()], reverse=True)[:max_results]}
+            # print(f'{len(pir_score)}')
+
+            # FIXME: drop pirs, that have low query matching_ngram / (matching_ngram + non_matching_ngram) ratio: they are not matches
+
+            pirs = [pir for score, pir in sorted([(score, pir) for (pir, score) in pir_score.items()], reverse=True)[:max_results]]
         with timing('order results'):
-            err = 0
-            return (
-                sorted(
-                    (SearchResult(query, details=self.pir_to_details[pir], err=err) for pir in pirs),
-                    reverse=True))
+            return [NGramSearchResult(query, details=self.pir_to_details[pir], score=pir_score[pir], index=self) for pir in pirs]
+
+    def select(self, query_ngrams, text_options):
+        """
+        Select the best matching text from text_options.
+
+        Note, that it is not intended as a general search, as text_options is expected to be a small list, and exactly one option is returned.
+        """
+
+        if not text_options:
+            return ''
+
+        def tfidf(ngrams):
+            tfidf = 0
+            for ngram in ngrams:
+                freq = self.ngram_counts[ngram]
+                # simplification: tf in tfidf is 1.0 (ignore ngram repetition)
+                # divide by max(freq, num) to lower the impact of very rare, potentially bogus ngrams
+                tfidf += 1.0 / max(freq, 15)
+                # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
+            return tfidf
+
+        _score, best_text = sorted(
+            ((tfidf(union_ngrams(text) & query_ngrams), text) for text in text_options),
+            reverse=True)[0]
+        return best_text
 
 ErodedIndex = NGramIndex
+# print(union_ngrams("d.r. union ngrams"))
