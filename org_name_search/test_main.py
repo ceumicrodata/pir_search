@@ -13,7 +13,8 @@ import tempfile
 
 from unittest import TestCase
 
-from .index import PirDetails, ErodedIndex, OrgNameParser
+from .data import PirDetails
+from .index import Index
 
 VERSION = '0.0.1-test'
 
@@ -55,7 +56,7 @@ class Test_with_files(TestCase):
             argv = ['--no-progress', 'szervezet', input_csv, output_csv]
             m.main(argv, VERSION, 'test_data')
 
-            self.assertEquals(
+            self.assertEqual(
                 len(read_csv(input_csv)), len(read_csv(output_csv)))
 
             input_header = set(header_of(input_csv))
@@ -71,7 +72,7 @@ class Test_with_files(TestCase):
             argv = ['--no-progress', 'szervezet', input_csv, output_csv]
             m.main(argv, VERSION, 'test_data')
 
-            self.assertEquals('101010', records_to_dict(read_csv(output_csv))[2]['pir'])
+            self.assertEqual('101010', records_to_dict(read_csv(output_csv))[2]['pir'])
 
     def test_taxids(self):
         with TempFile() as output_csv:
@@ -80,13 +81,14 @@ class Test_with_files(TestCase):
             argv = ['--no-progress', 'szervezet', input_csv, output_csv]
             m.main(argv, VERSION, 'test_data')
 
-            self.assertEquals('taxid__3', records_to_dict(read_csv(output_csv))[2]['pir_taxid'])
+            self.assertEqual('taxid__3', records_to_dict(read_csv(output_csv))[2]['pir_taxid'])
 
 
 class OrgNameMatcher(m.OrgNameMatcher):
 
     def load_index(self, index_data):
-        self.index = ErodedIndex(index_data, self.parse)
+        self.index = Index(index_data, self.parse)
+
 
 find_matches = OrgNameMatcher.run
 INPUT_FIELDS = m.InputFields('org_name', 'settlement')
@@ -105,7 +107,7 @@ def find1(org_name, org_settlement, pir_to_details, input_fields=INPUT_FIELDS, o
             ['id', input_fields.org_name, input_fields.settlement],
             [1, org_name, org_settlement],
         ])
-    parser = OrgNameParser()
+    parser = m.OrgNameParser()
     parser.build(settlements, report_conflicts=True)
     matches = find_matches(input, input_fields, output_fields, pir_to_details, parser.parse)
     return records_to_dict(matches)[1]
@@ -162,28 +164,28 @@ class Test_functionality(TestCase):
                     tax_id='taxid!'),
         }
         match = find1('megtévesztő minisztérium', '', pir_to_details)
-        self.assertEquals(PI_R, match[OUTPUT_FIELDS.pir])
+        self.assertEqual(PI_R, match[OUTPUT_FIELDS.pir])
 
     def test_settlement_matched_makes_a_better_score(self):
         match = find1('megévesztő minisztérium', 'budapest', self.pir_to_details)
-        self.assertEquals(PI_R, match[OUTPUT_FIELDS.pir])
+        self.assertEqual(PI_R, match[OUTPUT_FIELDS.pir])
         match = find1('budapesti megévesztő minisztérium', None, self.pir_to_details)
-        self.assertEquals(PI_R, match[OUTPUT_FIELDS.pir])
+        self.assertEqual(PI_R, match[OUTPUT_FIELDS.pir])
         match = find1('megtévesztő minisztérium', 'budapest', self.pir_to_details)
-        self.assertEquals(PI_R, match[OUTPUT_FIELDS.pir])
+        self.assertEqual(PI_R, match[OUTPUT_FIELDS.pir])
 
     def test_pir_name_field_is_set_to_best_match(self):
         match = find1('megévesztő minisztérium', 'budapest', self.pir_to_details)
-        self.assertEquals('megévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
+        self.assertEqual('megévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
 
         match = find1('megtévesztő minisztérium', 'budapest', self.pir_to_details)
-        self.assertEquals('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
+        self.assertEqual('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
 
     def test_settlement_decides_between_potential_matches(self):
         # print('>>>> XXX >>>>\n' * 3)
         match = find1('megévesztő minisztérium', 'tata', self.pir_to_details)
         # print('\n<<<< XXX <<<<' * 3)
-        self.assertEquals(TATA_PI_R, match[OUTPUT_FIELDS.pir])
+        self.assertEqual(TATA_PI_R, match[OUTPUT_FIELDS.pir])
 
     def test_within_equal_matches_the_one_with_less_words_removed_wins(self):
         pir_to_details = {
@@ -210,6 +212,6 @@ class Test_functionality(TestCase):
                     tax_id='taxid!'),
         }
         match = find1('megtévesztő minisztérium', 'budapest', pir_to_details)
-        self.assertEquals('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
+        self.assertEqual('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
 
 # long names with many words are still matched (kind of)

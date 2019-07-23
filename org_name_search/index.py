@@ -6,121 +6,14 @@ from __future__ import division
 
 
 import collections
-import functools
-import itertools
-import math
-import operator
-import os
-import sys
-import petl
-
-from .normalize import normalize, simplify_accents
-from .settlements import SettlementMap  # read_settlements, make_settlement_variant_map, extract_settlements
-from . import tagger
-from . import data
-
-PirDetails = collections.namedtuple('PirDetails', 'names settlements tax_id pir')
-
-
-def load_pir_details(path='data'):
-    def read(csv_file):
-        return petl.fromcsv(data.csv_open(path + '/' + csv_file), encoding='utf-8', errors='strict')
-
-    tzsazon = (
-        read('TZSAZON.csv')
-        .cut('TZSAZON_ID', 'PIR')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('PIR', int, failonerror=True)
-        .data())
-    tzsazon_id_to_pir = {tzsazon_id: pir for tzsazon_id, pir in tzsazon}
-
-
-    ado = set(
-        read('ADO.csv')
-        .cut('TZSAZON_ID', 'ADOSZAM')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('ADOSZAM', lambda adoszam: adoszam[:8], failonerror=True)
-        .data())
-    assert len(ado) == len({tzsazon for tzsazon, _ in ado}), 'BAD input: one PIR multiple tax id'
-    ado = dict(ado)
-
-    pir_to_details = {
-        pir: new_details(tax_id=ado.get(tzsazon), pir=pir)
-        for tzsazon, pir in tzsazon_id_to_pir.items()
-    }
-
-    cim = (
-        read('CIM.csv')
-        .cut('TZSAZON_ID', 'CTELEP')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('CTELEP', 'lower')
-        .data())
-    for tzsazon, telep in cim:
-        if telep:
-            pir = tzsazon_id_to_pir[tzsazon]
-            pir_to_details[pir].settlements.add(telep)
-
-    pirnev = (
-        read('PIRNEV.csv')
-        .cut('TZSAZON_ID', 'NEV')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('NEV', 'lower')
-        .data())
-    for tzsazon, nev in pirnev:
-        pir = tzsazon_id_to_pir[tzsazon]
-        pir_to_details[pir].names.add(nev)
-
-    ## extend with newly scraped PIR-s from 2019
-    pir_2019 = (
-        read('pir_2019.csv')
-        .cut('Törzskönyvi azonosító szám (PIR)', 'Elnevezés', 'Székhely', 'Adószám')
-        .convert('Törzskönyvi azonosító szám (PIR)', int, failonerror=True)
-        .convert('Elnevezés', 'lower')
-        .convert('Székhely', 'lower')
-        .data())
-    skipped = 0
-    for pir, nev, szekhely, adoszam in pir_2019:
-        try:
-            # "1055 Budapest, Kossuth Lajos tér 1-3."
-            _postal_code, telep = szekhely.split(',', 1)[0].split()
-        except (IndexError, ValueError):
-            skipped += 1
-            continue
-        adoszam = adoszam.replace('-', '')[:8]
-        if not adoszam.isdigit():
-            adoszam = None
-        if pir not in pir_to_details:
-            pir_to_details[pir] = new_details(tax_id=adoszam, pir=pir)
-        elif adoszam:
-            if pir_to_details[pir].tax_id is None:
-                d = pir_to_details[pir]
-                pir_to_details[pir] = PirDetails(
-                    pir=d.pir,
-                    tax_id=adoszam,
-                    names=d.names,
-                    settlements=d.settlements)
-            else:
-                assert pir_to_details[pir].tax_id == adoszam, f"{pir}: {adoszam} != {pir_to_details[pir]}"
-        pir_to_details[pir].names.add(nev)
-        pir_to_details[pir].settlements.add(telep)
-    # Exact number of known problems in data
-    assert skipped == 24, "Unexpected parse success/error"
-
-    return dict(pir_to_details)
-
-
-class OrgNameParser(SettlementMap):
-
-    def parse(self, org_name):
-        normalized_name = normalize(org_name)
-        settlements, name_wo_settlements = self.extract_settlements(normalized_name)
-        keywords, new_name = tagger.extract_org_types(name_wo_settlements)
-        rest = new_name.split()
-        return settlements, keywords, rest
-
-
 from datetime import datetime
 import contextlib
+import functools
+# import math
+
+from .normalize import normalize, simplify_accents
+from .data import new_details
+
 
 @contextlib.contextmanager
 def timing(what):
@@ -130,6 +23,7 @@ def timing(what):
     finally:
         end = datetime.now()
         print(f"{what} took {end - start}")
+
 
 def timed(f):
     def timed(*args, **kwargs):
@@ -158,7 +52,6 @@ def union_ngrams(text, n=3):
         word_ngrams.add(padded[-n-1:])
         text_ngrams |= word_ngrams
     return text_ngrams
-
 
 
 # name, names -> best_match_name, "match_score"
@@ -211,44 +104,6 @@ class Query:
     __repr__ = __str__ = __unicode__
 
 
-
-@functools.total_ordering
-class SearchResult:
-    # @timed
-    def __init__(self, query, details, err):
-        self.query_text = query.name
-        self.details = details
-        self.err = err
-        self.score, self.match_text, self.settlement = self._score_best(query, details)
-
-    def _score_best(self, query, details):
-        return max(
-            (query.similarity(name, settlement), name, settlement)
-            for name in details.names
-            for settlement in details.settlements | {''})
-
-    def __lt__(self, other):
-        return (
-            (self.err > other.err) or
-            (self.err == other.err and self.score < other.score))
-
-    def __eq__(self, other):
-        return (self.err, self.score) == (other.err, other.score)
-
-    def __unicode__(self):
-        return 'SearchResult({!r}, {!r}, {!r})'.format(self.match_text, self.settlement, self.score)
-
-    __repr__ = __str__ = __unicode__
-
-
-def new_details(names=None, settlements=None, pir=None, tax_id=None):
-    return PirDetails(
-        names=names or set(),
-        settlements=settlements or set(),
-        pir=pir,
-        tax_id=tax_id)
-
-
 @functools.total_ordering
 class NoResult:
 
@@ -275,50 +130,6 @@ class NoResult:
 
 
 NoResult = NoResult()
-
-
-MISSING = '*'
-
-class ErodedIndex:
-    def __init__(self, pir_to_details, parse):
-        self.parse = parse
-        max_errors = 2
-        self.pir_to_details = pir_to_details
-        self.index = collections.defaultdict(set)
-
-        for pir, details in self.pir_to_details.items():
-            for name in details.names:
-                settlements, tags, rest = parse(name)
-                for err, eroded in self.hashes(settlements | details.settlements, tags, rest):
-                    if err <= max_errors:
-                        self.index[eroded].add((err, pir))
-        self.index = dict(self.index)
-
-    def hashes(self, settlements, tags, rest):
-        m = {MISSING}
-        for eroded in itertools.product(m | settlements, m | tags, m | set(rest)):
-            err = eroded.count(MISSING)
-            yield err, u'{}_{}_{}'.format(*eroded)
-
-    def search(self, query, max_results=10):
-        err, pirs = self._search_parsed(*query.parsed)
-        return sorted(
-            (
-                SearchResult(query, details=self.pir_to_details[pir], err=err)
-                for pir in pirs),
-            reverse=True)[:max_results]
-
-    def _search_parsed(self, settlements, keywords, rest):
-        all_err_hashes = sorted(self.hashes(settlements, keywords, rest))
-        err = 0
-        pirs = set()
-        for err, err_hashes in itertools.groupby(all_err_hashes, operator.itemgetter(0)):
-            hashes = {hash for _, hash in err_hashes}
-            for hash in hashes:
-                pirs.update(pir for _, pir in self.index.get(hash, ()))
-            if pirs:
-                break
-        return err, pirs
 
 
 @functools.total_ordering
@@ -368,7 +179,7 @@ class NGramIndex:
             self.ngram_counts.update(ngrams)
         self.index = dict(self.index)
 
-        print(f"NGramIndex: total ngrams = {len(self.index)}")
+        # print(f"NGramIndex: total ngrams = {len(self.index)}")
 
     # @timed
     def search(self, query, max_results=10):
@@ -394,15 +205,17 @@ class NGramIndex:
         # features to use for deciding on match quality (much later, when evaluating matches - if there is any at all):
         #  - tfidf of ngrams
         #  - length of query - in number of ngrams
+        #  - match / (match + non-match) ratio
+        #  - parsed query text & parsed matches
 
         # pirs with highest scores
         with timing('select results'):
             # print(f'{len(pir_score)}')
 
             # FIXME: drop pirs, that have low query matching_ngram / (matching_ngram + non_matching_ngram) ratio: they are not matches
+            # (use pir_ngrams)
 
             pirs = [pir for score, pir in sorted([(score, pir) for (pir, score) in pir_score.items()], reverse=True)[:max_results]]
-        with timing('order results'):
             return [NGramSearchResult(query, details=self.pir_to_details[pir], score=pir_score[pir], index=self) for pir in pirs]
 
     def select(self, query_ngrams, text_options):
@@ -430,5 +243,6 @@ class NGramIndex:
             reverse=True)[0]
         return best_text
 
-ErodedIndex = NGramIndex
+
+Index = NGramIndex
 # print(union_ngrams("d.r. union ngrams"))

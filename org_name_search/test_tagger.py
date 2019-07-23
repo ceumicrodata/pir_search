@@ -14,9 +14,9 @@ class Test(TestCase):
 
     def assert_org_type(self, org_name, expected_keywords, expected_remainder=IGNORE_REMAINDER):
         keywords, remainder = m.find_keywords(m.ORG_TYPE, org_name)
-        self.assertEquals(expected_keywords, keywords)
+        self.assertEqual(expected_keywords, keywords)
         if expected_remainder is not IGNORE_REMAINDER:
-            self.assertEquals(expected_remainder, remainder)
+            self.assertEqual(expected_remainder, remainder)
 
     def test_multiple_tags(self):
         # works only partially - the regex should cover the matches in different steps

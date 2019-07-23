@@ -185,6 +185,7 @@ def followed_by(re):
     '''positive lookahead'''
     return RE('(?={})'.format(re))
 
+
 def not_followed_by(re):
     '''negative lookahead'''
     return RE('(?!{})'.format(re))

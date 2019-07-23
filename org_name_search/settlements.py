@@ -7,7 +7,7 @@ from __future__ import division
 import petl
 
 from . import data
-from .normalize import normalize, simplify_accents
+from .normalize import simplify_accents
 
 
 def import_ksh_settlements(xlsfilename, output_csv):

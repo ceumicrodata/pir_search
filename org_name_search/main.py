@@ -5,14 +5,16 @@ from __future__ import absolute_import
 from __future__ import division
 
 import argparse
-import operator
-import os
 import sys
 
 import petl
 from petl.io.sources import FileSource
 
-from .index import ErodedIndex, OrgNameParser, Query, NoResult, load_pir_details
+from .settlements import SettlementMap  # read_settlements, make_settlement_variant_map, extract_settlements
+from .index import Index, Query, NoResult
+from .data import load_pir_details
+from .normalize import normalize
+from . import tagger
 
 
 class InputFields:
@@ -53,6 +55,16 @@ def field_name(base, i):
     return base
 
 
+class OrgNameParser(SettlementMap):
+
+    def parse(self, org_name):
+        normalized_name = normalize(org_name)
+        settlements, name_wo_settlements = self.extract_settlements(normalized_name)
+        keywords, new_name = tagger.extract_org_types(name_wo_settlements)
+        rest = new_name.split()
+        return settlements, keywords, rest
+
+
 class OrgNameMatcher:
     def __init__(self, input_fields, output_fields, parse, extramatches=0, differentiating_ambiguity=0.0):
         self.index = None
@@ -66,7 +78,7 @@ class OrgNameMatcher:
             self.differentiating_ambiguity = differentiating_ambiguity
 
     def load_index(self, index_data):
-        self.index = ErodedIndex(load_pir_details(path=index_data), parse=self.parse)
+        self.index = Index(load_pir_details(path=index_data), parse=self.parse)
 
     def validate_input(self, input):
         input_header = input.header()
@@ -151,6 +163,7 @@ class OrgNameMatcher:
         finder.validate_input(input)
         finder.load_index(index_data)
         return finder.find_matches(input)
+
 
 find_matches = OrgNameMatcher.run
 

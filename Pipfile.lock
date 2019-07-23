@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "650d88cf48242cb7f461239160024c7c4a21be8c96079ac649a30f3bdc991b90"
+            "sha256": "9db78c4770859e9dacb8ca7cea6b4d18abd838593a74bee38c925abe5a1beda1"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -34,10 +34,10 @@
         },
         "isort": {
             "hashes": [
-                "sha256:c40744b6bc5162bbb39c1257fe298b7a393861d50978b565f3ccd9cb9de0182a",
-                "sha256:f57abacd059dc3bd666258d1efb0377510a89777fda3e3274e3c01f7c03ae22d"
+                "sha256:54da7e92468955c4fceacd0c86bd0ec997b0e1ee80d97f67c35a78b719dccab1",
+                "sha256:6e811fcb295968434526407adb8796944f1988c5b65e8139058f2014cbe100fd"
             ],
-            "version": "==4.3.20"
+            "version": "==4.3.21"
         },
         "lazy-object-proxy": {
             "hashes": [
@@ -123,10 +123,17 @@
             "markers": "implementation_name == 'cpython'",
             "version": "==1.4.0"
         },
+        "vulture": {
+            "hashes": [
+                "sha256:4b5a8980c338e9c068d43e7164555a1e4c9c7d84961ce2bc6f3ed975f6e5bc9d",
+                "sha256:524b6b9642d0bbe74ea21478bf260937d1ba9b3b86676ca0b17cd10b4b51ba01"
+            ],
+            "index": "pypi",
+            "version": "==1.0"
+        },
         "wrapt": {
             "hashes": [
-                "sha256:565a021fd19419476b9362b05eeaa094178de64f8361e44468f9e9d7843901e1",
-                "sha256:adb2651418a37268dad4d82b68e9c6fe36ac26ffb5f22ba4dabcaa5f4aea51bd"
+                "sha256:565a021fd19419476b9362b05eeaa094178de64f8361e44468f9e9d7843901e1"
             ],
             "version": "==1.11.2"
         }

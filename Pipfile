@@ -7,6 +7,7 @@ verify_ssl = true
 nose = "*"
 rope = "*"
 pylint = "*"
+vulture = "*"
 
 [packages]
 petl = "==1.1.0"

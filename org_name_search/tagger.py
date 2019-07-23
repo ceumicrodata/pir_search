@@ -4,8 +4,6 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import division
 
-import re
-
 from .rebuilder import (
     RE,
     any_of, group, separated, separated_group,
@@ -126,7 +124,8 @@ ORG_TYPE = any_of(
             'kulturális',
             'könyvtár')),
 
-    group('tudomany',
+    group(
+        'tudomany',
         any_of(
             'tudomány',
             'magyar tudományos akadémia',
