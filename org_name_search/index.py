@@ -25,6 +25,11 @@ def timing(what):
         print(f"{what} took {end - start}")
 
 
+@contextlib.contextmanager
+def notiming(_):
+    yield
+
+
 def timed(f):
     def timed(*args, **kwargs):
         with timing(f"{f.__name__}(*{args!r}, **{kwargs!r})"):
@@ -39,7 +44,6 @@ def ngrams(text, n=3):
     return set(text[i:i+n] for i in range(len(text) - n + 1))
 
 
-# @timed
 def union_ngrams(text, n=3):
     """
     Generate set of ngrams for words in text.
@@ -134,7 +138,6 @@ NoResult = NoResult()
 
 @functools.total_ordering
 class NGramSearchResult:
-    # @timed
     def __init__(self, query, details, score, index):
         self.query_text = query.name
         self.details = details
@@ -161,7 +164,6 @@ class NGramSearchResult:
 
 
 class NGramIndex:
-    # @timed
     def __init__(self, pir_to_details, parse):
         self.parse = parse
         self.pir_to_details = pir_to_details
@@ -179,28 +181,26 @@ class NGramIndex:
             self.ngram_counts.update(ngrams)
         self.index = dict(self.index)
 
-        # print(f"NGramIndex: total ngrams = {len(self.index)}")
-
-    # @timed
     def search(self, query, max_results=10):
-        @contextlib.contextmanager
-        def timing(_):
-            yield
-
         # pir_score = pir -> sum(tfidf(ngram) for ngram in query_ngrams)
-        with timing('tfidf'):
+        with notiming('tfidf'):
+            max_score = 0
             pir_score = collections.defaultdict(float)
             pir_ngrams = collections.defaultdict(int)
             for ngram in query.name_ngrams:
                 freq = self.ngram_counts[ngram]
                 pirs = self.index.get(ngram, ())
-                # simplification: tf in tfidf is 1.0 (ignore ngram repetition)
-                # divide by max(freq, num) to lower the impact of very rare, potentially bogus ngrams
-                tfidf = 1.0 / max(freq, 15)
+                # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
+                # shift freq to lower the impact of very rare, potentially bogus ngrams
+                tfidf = 1.0 / (freq + 10.0)
                 # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
+                max_score += tfidf
                 for pir in pirs:
                     pir_score[pir] += tfidf
                     pir_ngrams[pir] += 1
+
+        if max_score <= 0:
+            return []
 
         # features to use for deciding on match quality (much later, when evaluating matches - if there is any at all):
         #  - tfidf of ngrams
@@ -209,14 +209,15 @@ class NGramIndex:
         #  - parsed query text & parsed matches
 
         # pirs with highest scores
-        with timing('select results'):
+        with notiming('select results'):
             # print(f'{len(pir_score)}')
 
             # FIXME: drop pirs, that have low query matching_ngram / (matching_ngram + non_matching_ngram) ratio: they are not matches
             # (use pir_ngrams)
-
-            pirs = [pir for score, pir in sorted([(score, pir) for (pir, score) in pir_score.items()], reverse=True)[:max_results]]
-            return [NGramSearchResult(query, details=self.pir_to_details[pir], score=pir_score[pir], index=self) for pir in pirs]
+            min_score = max_score / 4.0
+            pirs = [pir for score, pir in sorted([(score, pir) for (pir, score) in pir_score.items() if score >= min_score], reverse=True)[:max_results]]
+            # return results with normalized scores
+            return [NGramSearchResult(query, details=self.pir_to_details[pir], score=pir_score[pir] / max_score, index=self) for pir in pirs]
 
     def select(self, query_ngrams, text_options):
         """
@@ -229,13 +230,14 @@ class NGramIndex:
             return ''
 
         def tfidf(ngrams):
-            tfidf = 0
+            tfidf = 0.0
             for ngram in ngrams:
                 freq = self.ngram_counts[ngram]
-                # simplification: tf in tfidf is 1.0 (ignore ngram repetition)
-                # divide by max(freq, num) to lower the impact of very rare, potentially bogus ngrams
-                tfidf += 1.0 / max(freq, 15)
-                # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
+                if freq:
+                    # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
+                    # shift freq to lower the impact of very rare, potentially bogus ngrams
+                    tfidf += 1.0 / (freq + 10.0)
+                    # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
             return tfidf
 
         _score, best_text = sorted(
