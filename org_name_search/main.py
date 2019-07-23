@@ -66,7 +66,23 @@ class OrgNameParser(SettlementMap):
 
 
 class OrgNameMatcher:
-    def __init__(self, input_fields, output_fields, parse, extramatches=0, differentiating_ambiguity=0.0):
+    """
+    Streaming (by PETL) organization name matcher.
+    """
+
+    def __init__(self,
+            input_fields : InputFields,
+            output_fields : OutputFields,
+            parse, extramatches=0, differentiating_ambiguity=0.0):
+        """
+        input_fields:  define the input stream structure (what is the fields to use for matching)
+        output_fields: define the match field names in the generated output stream
+        extramatches:  adds this many extra match to the output rows, it also turns off dropping ambiguous matches
+                       (in fact it is a tool to debug ambiguous matches)
+        differentiating_ambiguity:
+                       This number is the score difference that decides between ambiguous match (=NoResult) and an accepted match.
+                       When negative, dropping the ambiguous results is turned off.
+        """
         self.index = None
         self.input_fields = input_fields
         self.output_fields = output_fields
@@ -96,6 +112,9 @@ class OrgNameMatcher:
             .format(set(input_header).intersection(new_fields)))
 
     def find_matches(self, input):
+        """
+        Add matches to input stream, returns the output stream.
+        """
         # make up a new intermediate field that is guaranteed to not exist
         taken_header_names = set(input.header()) | self.output_fields.as_set
         max_input_field_name_length = max(len(name) for name in taken_header_names if name)
@@ -108,12 +127,12 @@ class OrgNameMatcher:
             else:
                 query = Query(name, None, self.parse)
             # nuke ambiguous matches, except when the first is a full match and the only one such
+            # XXX: this code only works with the first two matches, needs to be elaborated if more is needed
             matches = self.index.search(query)
             if len(matches) > 1:
                 score_diff = matches[0].score - matches[1].score
-                if not (matches[0].score == 1 and score_diff):
-                    if score_diff <= self.differentiating_ambiguity:
-                        matches = [NoResult]
+                if score_diff <= self.differentiating_ambiguity:
+                    matches = [NoResult]
             return matches
 
         def _unpack_match(input, i):
@@ -155,7 +174,9 @@ class OrgNameMatcher:
         output = input.addfield(matches, _find_matches)
         for i in range(self.extramatches + 1):
             output = _unpack_match(output, i)
-        return output.cutout(matches)
+        # drop raw match fields (they were unpacked)
+        output = output.cutout(matches)
+        return output
 
     @classmethod
     def run(cls, input, input_fields, output_fields, index_data, parse, extramatches=0, differentiating_ambiguity=0):
@@ -277,4 +298,4 @@ def main(argv, version, org_data_path='data'):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:], '0.0.1-alpha')
+    main(sys.argv[1:], '0.0.3-alpha')

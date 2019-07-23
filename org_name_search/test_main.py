@@ -182,9 +182,7 @@ class Test_functionality(TestCase):
         self.assertEqual('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
 
     def test_settlement_decides_between_potential_matches(self):
-        # print('>>>> XXX >>>>\n' * 3)
         match = find1('megévesztő minisztérium', 'tata', self.pir_to_details)
-        # print('\n<<<< XXX <<<<' * 3)
         self.assertEqual(TATA_PI_R, match[OUTPUT_FIELDS.pir])
 
     def test_within_equal_matches_the_one_with_less_words_removed_wins(self):
