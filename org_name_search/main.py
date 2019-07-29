@@ -131,6 +131,8 @@ class OrgNameMatcher:
             matches = self.index.search(query)
             if len(matches) > 1:
                 score_diff = matches[0].score - matches[1].score
+                if score_diff == 0:
+                    score_diff = matches[1].err - matches[0].err
                 if score_diff <= self.differentiating_ambiguity:
                     matches = [NoResult]
             return matches
@@ -257,7 +259,7 @@ def parse_args(argv, version):
         help='''output multiple matches, implies --keep-ambiguous''')
 
     parser.add_argument(
-        '--drop-ambiguous', dest='differentiating_ambiguity', default=0.05, type=float,
+        '--drop-ambiguous', dest='differentiating_ambiguity', default=0.01, type=float,
         help='''report no match for matches where the score difference of the first
         two matches are less than this value
         (default: %(default)s)''')

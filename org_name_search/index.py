@@ -138,24 +138,22 @@ NoResult = NoResult()
 
 @functools.total_ordering
 class NGramSearchResult:
-    def __init__(self, query, details, score, index):
+    def __init__(self, query, details, score, err, match_text, match_settlement):
         self.query_text = query.name
         self.details = details
-        self.err = 0
+        assert err >= 0
+        # print(score, err, match_text)
+        assert 0 <= score <= 1
+        self.err = err
         self.score = score
-        self.match_text = index.select(query.name_ngrams, details.names)
-        if query.settlement in details.settlements:
-            self.settlement = query.settlement
-        else:
-            self.settlement = index.select(query.name_ngrams, details.settlements)
+        self.match_text = match_text
+        self.settlement = match_settlement
 
     def __lt__(self, other):
-        return (
-            (self.err > other.err) or
-            (self.err == other.err and self.score < other.score))
+        return (self.score, -self.err) < (other.score, -other.err)
 
     def __eq__(self, other):
-        return (self.err, self.score) == (other.err, other.score)
+        return (self.score, self.err) == (other.score, other.err)
 
     def __unicode__(self):
         return 'NGramSearchResult({!r}, {!r}, {!r})'.format(self.match_text, self.settlement, self.score)
@@ -202,6 +200,29 @@ class NGramIndex:
         if max_score <= 0:
             return []
 
+        def search_result(pir):
+            details = self.pir_to_details[pir]
+            # score is normalized:
+            score = pir_score[pir] / max_score
+            match_text = self.select(query.name_ngrams, details.names)
+            if query.settlement in details.settlements:
+                settlement = query.settlement
+            else:
+                settlement = self.select(query.name_ngrams, details.settlements)
+            # error is tfidf of extra ngrams in match
+            match = match_text
+            if settlement:
+                match += ' ' + settlement
+            err = self._tfidf(union_ngrams(match) - query.name_ngrams)
+            return (
+                NGramSearchResult(
+                    query,
+                    details=details,
+                    score=score,
+                    err=err,
+                    match_text=match_text,
+                    match_settlement=settlement))
+
         # features to use for deciding on match quality (much later, when evaluating matches - if there is any at all):
         #  - tfidf of ngrams
         #  - length of query - in number of ngrams
@@ -212,12 +233,27 @@ class NGramIndex:
         with notiming('select results'):
             # print(f'{len(pir_score)}')
 
-            # FIXME: drop pirs, that have low query matching_ngram / (matching_ngram + non_matching_ngram) ratio: they are not matches
-            # (use pir_ngrams)
+            # drop matches, that have low query matching score: they are not matches
             min_score = max_score / 4.0
-            pirs = [pir for score, pir in sorted([(score, pir) for (pir, score) in pir_score.items() if score >= min_score], reverse=True)[:max_results]]
-            # return results with normalized scores
-            return [NGramSearchResult(query, details=self.pir_to_details[pir], score=pir_score[pir] / max_score, index=self) for pir in pirs]
+            top_scores = sorted(set(score for score in pir_score.values() if score > min_score), reverse=True)[:max_results]
+            if not top_scores:
+                return []
+            min_score = top_scores[-1]
+
+            pirs = (pir for pir, score in pir_score.items() if score >= min_score)
+            search_results = (search_result(pir) for pir in pirs)
+            return sorted(search_results, reverse=True)[:max_results]
+
+    def _tfidf(self, ngrams):
+        tfidf = 0.0
+        for ngram in ngrams:
+            freq = self.ngram_counts[ngram]
+            if freq:
+                # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
+                # shift freq to lower the impact of very rare, potentially bogus ngrams
+                tfidf += 1.0 / (freq + 10.0)
+                # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
+        return tfidf
 
     def select(self, query_ngrams, text_options):
         """
@@ -229,20 +265,11 @@ class NGramIndex:
         if not text_options:
             return ''
 
-        def tfidf(ngrams):
-            tfidf = 0.0
-            for ngram in ngrams:
-                freq = self.ngram_counts[ngram]
-                if freq:
-                    # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
-                    # shift freq to lower the impact of very rare, potentially bogus ngrams
-                    tfidf += 1.0 / (freq + 10.0)
-                    # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
-            return tfidf
-
-        _score, best_text = sorted(
-            ((tfidf(union_ngrams(text) & query_ngrams), text) for text in text_options),
-            reverse=True)[0]
+        _score, best_text = (
+            sorted(
+                ((self._tfidf(union_ngrams(text) & query_ngrams), text)
+                    for text in text_options),
+                reverse=True)[0])
         return best_text
 
 
