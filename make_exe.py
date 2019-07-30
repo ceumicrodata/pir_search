@@ -12,7 +12,7 @@ WINDOWS_ZIPEXE_PREFIX = b'\r\n'.join((
     b''))
 
 POSIX_ZIPEXE_PREFIX = b'\n'.join((
-    b'#!/usr/bin/env python',
+    b'#!/usr/bin/env python3',
     b''))
 
 ACCEPTED_EXTENSIONS = {'.zip', '.pyz', '.pyzw', None}

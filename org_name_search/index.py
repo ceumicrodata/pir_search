@@ -162,8 +162,10 @@ class NGramSearchResult:
 
 
 class NGramIndex:
-    def __init__(self, pir_to_details, parse):
+    def __init__(self, pir_to_details, parse, idf_shift=0):
         self.parse = parse
+        assert idf_shift >= 0
+        self.idf_shift = idf_shift
         self.pir_to_details = pir_to_details
         self.index = collections.defaultdict(set)  # ngram -> set(pirs)
         self.ngram_counts = collections.Counter()
@@ -187,15 +189,16 @@ class NGramIndex:
             pir_ngrams = collections.defaultdict(int)
             for ngram in query.name_ngrams:
                 freq = self.ngram_counts[ngram]
-                pirs = self.index.get(ngram, ())
-                # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
-                # shift freq to lower the impact of very rare, potentially bogus ngrams
-                tfidf = 1.0 / (freq + 10.0)
-                # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
-                max_score += tfidf
-                for pir in pirs:
-                    pir_score[pir] += tfidf
-                    pir_ngrams[pir] += 1
+                if freq:
+                    pirs = self.index.get(ngram, ())
+                    # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
+                    # shift freq to lower the impact of very rare, potentially bogus ngrams
+                    tfidf = 1.0 / (freq + self.idf_shift)
+                    # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
+                    max_score += tfidf
+                    for pir in pirs:
+                        pir_score[pir] += tfidf
+                        pir_ngrams[pir] += 1
 
         if max_score <= 0:
             return []
@@ -251,7 +254,7 @@ class NGramIndex:
             if freq:
                 # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
                 # shift freq to lower the impact of very rare, potentially bogus ngrams
-                tfidf += 1.0 / (freq + 10.0)
+                tfidf += 1.0 / (freq + self.idf_shift)
                 # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
         return tfidf
 

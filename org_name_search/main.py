@@ -73,7 +73,7 @@ class OrgNameMatcher:
     def __init__(self,
             input_fields : InputFields,
             output_fields : OutputFields,
-            parse, extramatches=0, differentiating_ambiguity=0.0):
+            parse, extramatches=0, differentiating_ambiguity=0.0, idf_shift=None):
         """
         input_fields:  define the input stream structure (what is the fields to use for matching)
         output_fields: define the match field names in the generated output stream
@@ -82,6 +82,9 @@ class OrgNameMatcher:
         differentiating_ambiguity:
                        This number is the score difference that decides between ambiguous match (=NoResult) and an accepted match.
                        When negative, dropping the ambiguous results is turned off.
+        idf_shift:     shift document frequency by this number, makes rare instances of ngrams less rare, range: non-negative numbers
+                       the smaller the number (<10), the greater effect of rare, potentially bogus names will have (not good)
+                       the bigger the number, the less impact of frequency differences will have (not good)
         """
         self.index = None
         self.input_fields = input_fields
@@ -92,9 +95,11 @@ class OrgNameMatcher:
             self.differentiating_ambiguity = -1
         else:
             self.differentiating_ambiguity = differentiating_ambiguity
+        assert idf_shift >= 0
+        self.idf_shift = idf_shift
 
     def load_index(self, index_data):
-        self.index = Index(load_pir_details(path=index_data), parse=self.parse)
+        self.index = Index(load_pir_details(path=index_data), parse=self.parse, idf_shift=self.idf_shift)
 
     def validate_input(self, input):
         input_header = input.header()
@@ -181,8 +186,8 @@ class OrgNameMatcher:
         return output
 
     @classmethod
-    def run(cls, input, input_fields, output_fields, index_data, parse, extramatches=0, differentiating_ambiguity=0):
-        finder = cls(input_fields, output_fields, parse, extramatches, differentiating_ambiguity)
+    def run(cls, input, input_fields, output_fields, index_data, parse, extramatches=0, differentiating_ambiguity=0, idf_shift=0):
+        finder = cls(input_fields, output_fields, parse, extramatches, differentiating_ambiguity, idf_shift)
         finder.validate_input(input)
         finder.load_index(index_data)
         return finder.find_matches(input)
@@ -270,6 +275,22 @@ def parse_args(argv, version):
         help='''keep all first matches - even potentially bad ones
         (see --drop-ambiguous)''')
 
+    def non_negative_float(value):
+        value = float(value)
+        if value < 0:
+            raise argparse.ArgumentTypeError(f"expecting non-negative float, got {value}")
+        return value
+
+    parser.add_argument(
+        '--idf-shift', type=non_negative_float, default=10.0,
+        help="""Shift frequency count by this number. This is an important parameter, influences score!
+        If this value is small (<10), typos in text to find have great effect,
+        potentially resulting in a bad match, that has the same rare character combination as the typo.
+        However, if this value is too big (>>100), rare words will have the same influence over the match as common ones
+        (e.g. siofoki = budapesti = magyar = nemzeti).
+        (default: %(default)s)"""
+    )
+
     parser.add_argument(
         '-V', '--version', action='version',
         version='%(prog)s {}'.format(version),
@@ -291,7 +312,8 @@ def main(argv, version, org_data_path='data'):
         input, input_fields, output_fields,
         index_data=org_data_path, parse=parser.parse,
         extramatches=args.extramatches,
-        differentiating_ambiguity=args.differentiating_ambiguity)
+        differentiating_ambiguity=args.differentiating_ambiguity,
+        idf_shift=args.idf_shift)
 
     if args.progress:
         matches = matches.progress()
