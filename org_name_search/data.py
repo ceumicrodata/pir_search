@@ -25,21 +25,9 @@ for _ in __name__.split('.'):
 is_zip_app = os.path.isfile(app_root)
 
 if is_zip_app:
-    import zipfile
-    import contextlib
-
-    @contextlib.contextmanager
-    def open(filename):
-        zf = zipfile.ZipFile(app_root)
-        try:
-            yield zf.open(filename)
-        finally:
-            zf.close()
-
     def csv_open(filename):
         return petl.io.sources.ZipSource(app_root, filename)
 else:
-    open = open
     csv_open = petl.io.sources.FileSource
 
 
@@ -165,4 +153,4 @@ def load_pir_details(path='data'):
     return dict(pir_to_details)
 
 
-__all__ = ['open', 'csv_open', 'PirDetails', 'load_pir_details']
+__all__ = ['csv_open', 'PirDetails', 'load_pir_details']
