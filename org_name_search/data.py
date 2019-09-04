@@ -10,9 +10,13 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import division
 
+import attr
 import collections
+import datetime
 import os
 import petl
+from typing import Set
+
 
 app_root = __file__
 for _ in __name__.split('.'):
@@ -39,15 +43,33 @@ else:
     csv_open = petl.io.sources.FileSource
 
 
-PirDetails = collections.namedtuple('PirDetails', 'names settlements tax_id pir')
+@attr.s(auto_attribs=True)
+class PirDetails:
+    pir: str = None
+    tax_id: str = None
+    start_date: datetime.date = None
+    end_date: datetime.date = None
+    names: Set[str] = attr.Factory(set)
+    settlements: Set[str] = attr.Factory(set)
+
+    def is_valid_at(self, date: datetime.date) -> bool:
+        born_later = self.start_date and self.start_date > date
+        died_earlier = self.end_date and self.end_date < date
+        return not (born_later or died_earlier)
 
 
-def new_details(names=None, settlements=None, pir=None, tax_id=None):
-    return PirDetails(
-        names=names or set(),
-        settlements=settlements or set(),
-        pir=pir,
-        tax_id=tax_id)
+def parse_date(text: str) -> datetime.date:
+    if text:
+        try:
+            return datetime.date(int(text[:4]), int(text[4:6]), int(text[6:]))
+        except ValueError:
+            # print(text)
+            pass
+
+
+assert parse_date('') == None
+assert parse_date('00000000') == None
+assert parse_date('20190817') == datetime.date(2019, 8, 17)
 
 
 def load_pir_details(path='data'):
@@ -72,7 +94,7 @@ def load_pir_details(path='data'):
     ado = dict(ado)
 
     pir_to_details = {
-        pir: new_details(tax_id=ado.get(tzsazon), pir=pir)
+        pir: PirDetails(tax_id=ado.get(tzsazon), pir=pir)
         for tzsazon, pir in tzsazon_id_to_pir.items()
     }
 
@@ -100,13 +122,17 @@ def load_pir_details(path='data'):
     # # extend with newly scraped PIR-s from 2019
     pir_2019 = (
         read('pir_2019.csv')
-        .cut('Törzskönyvi azonosító szám (PIR)', 'Elnevezés', 'Székhely', 'Adószám')
+        .cut(
+            'alapitas', 'megszunes',
+            'Törzskönyvi azonosító szám (PIR)', 'Elnevezés', 'Székhely', 'Adószám')
+        .convert('alapitas', parse_date, failonerror=True)
+        .convert('megszunes', parse_date, failonerror=True)
         .convert('Törzskönyvi azonosító szám (PIR)', int, failonerror=True)
         .convert('Elnevezés', 'lower')
         .convert('Székhely', 'lower')
         .data())
     skipped = 0
-    for pir, nev, szekhely, adoszam in pir_2019:
+    for alapitas, megszunes, pir, nev, szekhely, adoszam in pir_2019:
         try:
             # "1055 Budapest, Kossuth Lajos tér 1-3."
             _postal_code, telep = szekhely.split(',', 1)[0].split()
@@ -117,7 +143,7 @@ def load_pir_details(path='data'):
         if not adoszam.isdigit():
             adoszam = None
         if pir not in pir_to_details:
-            pir_to_details[pir] = new_details(tax_id=adoszam, pir=pir)
+            pir_to_details[pir] = PirDetails(tax_id=adoszam, pir=pir)
         elif adoszam:
             if pir_to_details[pir].tax_id is None:
                 d = pir_to_details[pir]
@@ -130,6 +156,8 @@ def load_pir_details(path='data'):
                 assert pir_to_details[pir].tax_id == adoszam, f"PIR {pir}: tax id mismatch between existing {adoszam} != new {pir_to_details[pir].tax_id}"
         pir_to_details[pir].names.add(nev)
         pir_to_details[pir].settlements.add(telep)
+        pir_to_details[pir].start_date = alapitas
+        pir_to_details[pir].end_date = megszunes
     if len(pir_to_details) > 100:
         # For non-test runs, we know he exact number of problems in the data
         assert skipped == 24, f"Unexpected parse success/error: {skipped} != 24"

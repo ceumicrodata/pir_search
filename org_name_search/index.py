@@ -12,7 +12,7 @@ import functools
 # import math
 
 from .normalize import normalize, simplify_accents
-from .data import new_details
+from .data import PirDetails
 
 
 @contextlib.contextmanager
@@ -62,10 +62,11 @@ def union_ngrams(text, n=3):
 # FIXME: details -> pir_details
 
 class Query:
-    def __init__(self, name, settlement, parse):
+    def __init__(self, name: str, settlement: str, parse, date: datetime.date =None):
         self.name = name
         self.settlement = settlement
         self.parse = parse
+        self.date: datetime.date = date
         self.name_ngrams = union_ngrams(name) | (union_ngrams(settlement) if settlement else set())
 
     @property
@@ -120,7 +121,7 @@ class NoResult:
     # diagnostic
     err = 0
     key = None
-    details = new_details()
+    details = PirDetails()
 
     def __lt__(self, other):
         return other is not self
@@ -225,6 +226,12 @@ class NGramIndex:
                     err=err,
                     match_text=match_text,
                     match_settlement=settlement))
+
+        # drop matches that were not valid at query time
+        if query.date:
+            for pir in list(pir_score):
+                if not self.pir_to_details[pir].is_valid_at(query.date):
+                    del pir_score[pir]
 
         # features to use for deciding on match quality (much later, when evaluating matches - if there is any at all):
         #  - tfidf of ngrams

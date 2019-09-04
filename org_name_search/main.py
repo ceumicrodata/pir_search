@@ -12,19 +12,20 @@ from petl.io.sources import FileSource
 
 from .settlements import SettlementMap  # read_settlements, make_settlement_variant_map, extract_settlements
 from .index import Index, Query, NoResult
-from .data import load_pir_details
+from .data import load_pir_details, parse_date
 from .normalize import normalize
 from . import tagger
 
 
 class InputFields:
-    def __init__(self, org_name, settlement=None):
+    def __init__(self, org_name, settlement=None, date=None):
         self.org_name = org_name
         self.settlement = settlement
+        self.date = date
 
     @classmethod
     def from_args(cls, args):
-        return cls(args.org_name_field, args.settlement_field)
+        return cls(args.org_name_field, args.settlement_field, args.date_field)
 
 
 class OutputFields:
@@ -102,10 +103,11 @@ class OrgNameMatcher:
         self.index = Index(load_pir_details(path=index_data), parse=self.parse, idf_shift=self.idf_shift)
 
     def validate_input(self, input):
-        input_header = input.header()
+        input_header = petl.header(input)
 
         assert self.input_fields.org_name in input_header
         assert self.input_fields.settlement in set(input_header) | {None}
+        assert self.input_fields.date in set(input_header) | {None}
 
         # output fields must not exist
         new_fields = {
@@ -118,19 +120,25 @@ class OrgNameMatcher:
 
     def find_matches(self, input):
         """
-        Add matches to input stream, returns the output stream.
+        Transforms the input stream into output stream by adding the matches.
+
+        Expects and returns a PETL table container
         """
         # make up a new intermediate field that is guaranteed to not exist
-        taken_header_names = set(input.header()) | self.output_fields.as_set
+        taken_header_names = set(petl.header(input)) | self.output_fields.as_set
         max_input_field_name_length = max(len(name) for name in taken_header_names if name)
-        matches = 'matches-' + '0' * max_input_field_name_length
+        matches_field = 'matches-' + '0' * max_input_field_name_length
 
-        def _find_matches(row, org_name=self.input_fields.org_name, settlement=self.input_fields.settlement):
-            name = row[org_name]
-            if settlement:
-                query = Query(name, row[settlement], self.parse)
-            else:
-                query = Query(name, None, self.parse)
+        org_name_field = self.input_fields.org_name
+        settlement_field = self.input_fields.settlement
+        date_field = self.input_fields.date
+
+        def _find_matches(row):
+            name = row[org_name_field]
+            settlement = row[settlement_field] if settlement_field else None
+            date = parse_date(row[date_field]) if date_field else None
+            query = Query(name, settlement, self.parse, date=date)
+
             # nuke ambiguous matches, except when the first is a full match and the only one such
             # XXX: this code only works with the first two matches, needs to be elaborated if more is needed
             matches = self.index.search(query)
@@ -144,7 +152,7 @@ class OrgNameMatcher:
 
         def _unpack_match(input, i):
             def _get_match(row, i):
-                row_matches = row[matches]
+                row_matches = row[matches_field]
                 if len(row_matches) <= i:
                     return NoResult
                 result = row_matches[i]
@@ -178,11 +186,11 @@ class OrgNameMatcher:
 
             return output
 
-        output = input.addfield(matches, _find_matches)
+        output = input.addfield(matches_field, _find_matches)
         for i in range(self.extramatches + 1):
             output = _unpack_match(output, i)
         # drop raw match fields (they were unpacked)
-        output = output.cutout(matches)
+        output = output.cutout(matches_field)
         return output
 
     @classmethod
@@ -227,6 +235,12 @@ def parse_args(argv, version):
         help=(
             '''input field containing the settlement of the HQ
             of the organization (default: %(default)s)'''))
+
+    parser.add_argument(
+        '--date', dest='date_field',
+        help=('''input field containing the date of record,
+        when present only organizations live at the time are considered as matches.
+        This greatly improves match quality (ignores/returns less ambiguous matches)'''))
 
     parser.add_argument(
         '--pir', dest='pir_field', default='pir',
