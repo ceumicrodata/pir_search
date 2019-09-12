@@ -12,7 +12,7 @@ from petl.io.sources import FileSource
 
 from .settlements import SettlementMap  # read_settlements, make_settlement_variant_map, extract_settlements
 from .index import Index, Query, NoResult
-from .data import load_pir_details, parse_date
+from .data import load_pir_to_details, parse_date
 from .normalize import normalize
 from . import tagger
 
@@ -100,7 +100,7 @@ class OrgNameMatcher:
         self.idf_shift = idf_shift
 
     def load_index(self, index_data):
-        self.index = Index(load_pir_details(path=index_data), parse=self.parse, idf_shift=self.idf_shift)
+        self.index = Index(load_pir_to_details(path=index_data), parse=self.parse, idf_shift=self.idf_shift)
 
     def validate_input(self, input):
         input_header = petl.header(input)
@@ -216,6 +216,11 @@ def parse_args(argv, version):
         description=description)
 
     parser.add_argument(
+        'pir_index',
+        metavar='PIR_INDEX_JSON',
+        help='json file containing the pre-processed PIR database (see pir-index bead)')
+
+    parser.add_argument(
         'org_name_field',
         metavar='ORG_NAME_FIELD',
         help='input field containing the organization name to find')
@@ -314,7 +319,7 @@ def parse_args(argv, version):
     return args
 
 
-def main(argv, version, org_data_path='data'):
+def main(argv, version):
     args = parse_args(argv, version)
     input_fields = InputFields.from_args(args)
     output_fields = OutputFields.from_args(args)
@@ -324,7 +329,8 @@ def main(argv, version, org_data_path='data'):
 
     matches = find_matches(
         input, input_fields, output_fields,
-        index_data=org_data_path, parse=parser.parse,
+        index_data=args.pir_index,
+        parse=parser.parse,
         extramatches=args.extramatches,
         differentiating_ambiguity=args.differentiating_ambiguity,
         idf_shift=args.idf_shift)

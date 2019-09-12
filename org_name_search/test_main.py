@@ -54,8 +54,8 @@ class Test_with_files(TestCase):
         with TempFile() as output_csv:
             input_csv = 'test_data/input.csv'
 
-            argv = ['--no-progress', 'szervezet', input_csv, output_csv]
-            m.main(argv, VERSION, 'test_data')
+            argv = ['--no-progress', 'test_data/index.json', 'szervezet', input_csv, output_csv]
+            m.main(argv, VERSION)
 
             self.assertEqual(
                 len(read_csv(input_csv)), len(read_csv(output_csv)))
@@ -70,8 +70,8 @@ class Test_with_files(TestCase):
         with TempFile() as output_csv:
             input_csv = 'test_data/input.csv'
 
-            argv = ['--no-progress', 'szervezet', input_csv, output_csv]
-            m.main(argv, VERSION, 'test_data')
+            argv = ['--no-progress', 'test_data/index.json', 'szervezet', input_csv, output_csv]
+            m.main(argv, VERSION)
 
             self.assertEqual('101010', records_to_dict(read_csv(output_csv))[2]['pir'])
 
@@ -79,8 +79,8 @@ class Test_with_files(TestCase):
         with TempFile() as output_csv:
             input_csv = 'test_data/input.csv'
 
-            argv = ['--no-progress', 'szervezet', input_csv, output_csv]
-            m.main(argv, VERSION, 'test_data')
+            argv = ['--no-progress', 'test_data/index.json', 'szervezet', input_csv, output_csv]
+            m.main(argv, VERSION)
 
             self.assertEqual('taxid__3', records_to_dict(read_csv(output_csv))[2]['pir_taxid'])
 

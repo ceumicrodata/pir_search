@@ -1,0 +1,214 @@
+{
+    "300014": {
+        "pir": 300014,
+        "tax_id": "taxid__1",
+        "start_date": null,
+        "end_date": null,
+        "names": [
+            "megveszt\u0151 miniszt\u00e9rium"
+        ],
+        "settlements": [
+            "budapest"
+        ]
+    },
+    "31415926": {
+        "pir": 31415926,
+        "tax_id": "taxid__2",
+        "start_date": null,
+        "end_date": null,
+        "names": [
+            "int\u00e9z\u0151 hivatal"
+        ],
+        "settlements": []
+    },
+    "101010": {
+        "pir": 101010,
+        "tax_id": "taxid__3",
+        "start_date": null,
+        "end_date": null,
+        "names": [
+            "meg\u00e9veszt\u0151 miniszt\u00e9rium"
+        ],
+        "settlements": []
+    },
+    "839824": {
+        "pir": 839824,
+        "tax_id": "15839826",
+        "start_date": "2018-12-28",
+        "end_date": null,
+        "names": [
+            "magyar honv\u00e9ds\u00e9g moderniz\u00e1ci\u00f3s int\u00e9zet"
+        ],
+        "settlements": [
+            "budapest"
+        ]
+    },
+    "839835": {
+        "pir": 839835,
+        "tax_id": "15839833",
+        "start_date": "2018-12-28",
+        "end_date": null,
+        "names": [
+            "vitny\u00e9di csal\u00e1di b\u00f6lcs\u0151de fenntart\u00f3 t\u00e1rsul\u00e1s"
+        ],
+        "settlements": [
+            "vitny\u00e9d"
+        ]
+    },
+    "839857": {
+        "pir": 839857,
+        "tax_id": "15839857",
+        "start_date": "2019-01-08",
+        "end_date": null,
+        "names": [
+            "b\u00f6lcskei szoci\u00e1lis alapszolg\u00e1ltat\u00e1si k\u00f6zpont"
+        ],
+        "settlements": [
+            "b\u00f6lcske"
+        ]
+    },
+    "839868": {
+        "pir": 839868,
+        "tax_id": "15839864",
+        "start_date": "2019-01-02",
+        "end_date": null,
+        "names": [
+            "magyars\u00e1gkutat\u00f3 int\u00e9zet"
+        ],
+        "settlements": [
+            "budapest"
+        ]
+    },
+    "839880": {
+        "pir": 839880,
+        "tax_id": "15839888",
+        "start_date": "2019-01-11",
+        "end_date": null,
+        "names": [
+            "mini b\u00f6lcs\u0151de dudar"
+        ],
+        "settlements": [
+            "dudar"
+        ]
+    },
+    "839891": {
+        "pir": 839891,
+        "tax_id": "15839895",
+        "start_date": "2019-01-24",
+        "end_date": null,
+        "names": [
+            "budakeszi eg\u00e9szs\u00e9g\u00fcgyi k\u00f6zpont"
+        ],
+        "settlements": [
+            "budakeszi"
+        ]
+    },
+    "839901": {
+        "pir": 839901,
+        "tax_id": "15839905",
+        "start_date": "2019-01-21",
+        "end_date": null,
+        "names": [
+            "d\u00e9l-zala hullad\u00e9kgazd\u00e1lkod\u00e1si t\u00e1rsul\u00e1s"
+        ],
+        "settlements": [
+            "nagykanizsa"
+        ]
+    },
+    "839923": {
+        "pir": 839923,
+        "tax_id": "15839929",
+        "start_date": "2019-01-24",
+        "end_date": null,
+        "names": [
+            "kiskunhalasi orsz\u00e1gos b\u00fcntet\u00e9s-v\u00e9grehajt\u00e1si int\u00e9zet"
+        ],
+        "settlements": [
+            "kiskunhalas"
+        ]
+    },
+    "840000": {
+        "pir": 840000,
+        "tax_id": "15840008",
+        "start_date": "2019-02-08",
+        "end_date": null,
+        "names": [
+            "ab\u00e1di benedek m\u0171vel\u0151d\u00e9si h\u00e1z"
+        ],
+        "settlements": [
+            "ab\u00e1dszal\u00f3k"
+        ]
+    },
+    "840011": {
+        "pir": 840011,
+        "tax_id": "15840015",
+        "start_date": "2019-02-12",
+        "end_date": null,
+        "names": [
+            "ny\u00edrpilis \u00f6nkorm\u00e1nyzat konyh\u00e1ja"
+        ],
+        "settlements": [
+            "ny\u00edrpilis"
+        ]
+    },
+    "401320": {
+        "pir": 401320,
+        "tax_id": "15401328",
+        "start_date": "1991-03-29",
+        "end_date": "2012-12-31",
+        "names": [
+            "kapoly, somogymeggyes k\u00f6zs\u00e9gek k\u00f6rjegyz\u0151s\u00e9ge"
+        ],
+        "settlements": [
+            "kapoly"
+        ]
+    },
+    "600325": {
+        "pir": 600325,
+        "tax_id": null,
+        "start_date": "1993-11-01",
+        "end_date": "2004-08-31",
+        "names": [
+            "napk\u00f6ziotthonos \u00f3voda kapoly"
+        ],
+        "settlements": [
+            "kapoly"
+        ]
+    },
+    "611282": {
+        "pir": 611282,
+        "tax_id": null,
+        "start_date": "1993-11-01",
+        "end_date": "2004-09-01",
+        "names": [
+            "\u00e1ltal\u00e1nos iskola \u00e9s napk\u00f6ziotthonos \u00f3voda kapoly"
+        ],
+        "settlements": [
+            "kapoly"
+        ]
+    },
+    "656959": {
+        "pir": 656959,
+        "tax_id": null,
+        "start_date": "2005-01-28",
+        "end_date": "2011-08-31",
+        "names": [
+            "kapolyi \u00f3voda"
+        ],
+        "settlements": [
+            "kapoly"
+        ]
+    },
+    "783233": {
+        "pir": 783233,
+        "tax_id": null,
+        "start_date": "2010-11-09",
+        "end_date": "2012-02-13",
+        "names": [
+            "kapoly k\u00f6zs\u00e9gi cig\u00e1ny helyi kisebbs\u00e9gi \u00f6nkorm\u00e1nyzat"
+        ],
+        "settlements": [
+            "kapoly"
+        ]
+    }
+}
