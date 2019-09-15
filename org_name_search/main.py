@@ -101,9 +101,12 @@ class OrgNameMatcher:
     def validate_input(self, input):
         input_header = petl.header(input)
 
-        assert self.input_fields.org_name in input_header
-        assert self.input_fields.settlement in set(input_header) | {None}
-        assert self.input_fields.date in set(input_header) | {None}
+        assert self.input_fields.org_name in input_header, (
+            f'Column "{self.input_fields.org_name}" not in input {input_header}')
+        assert self.input_fields.settlement in set(input_header) | {None}, (
+            f'Column "{self.input_fields.settlement}" not in input {input_header}')
+        assert self.input_fields.date in set(input_header) | {None}, (
+            f'Column "{self.input_fields.date}" not in input {input_header}')
 
         # output fields must not exist
         new_fields = {
@@ -111,7 +114,7 @@ class OrgNameMatcher:
             for f in self.output_fields.as_set
             for i in range(self.extramatches + 1)}
         assert set(input_header).isdisjoint(new_fields), (
-            '{} are already in input'
+            'Column[s] {} are already in input'
             .format(set(input_header).intersection(new_fields)))
 
     def find_matches(self, input):
@@ -192,8 +195,11 @@ class OrgNameMatcher:
     @classmethod
     def run(cls, input, input_fields, output_fields, index_data, parse, extramatches=0, differentiating_ambiguity=0, idf_shift=0):
         finder = cls(input_fields, output_fields, parse, extramatches, differentiating_ambiguity, idf_shift)
+        print(f"Validating input headers {petl.header(input)}")
         finder.validate_input(input)
+        print(f"Loading index {index_data}")
         finder.load_index(index_data)
+        print("Finding matches...")
         return finder.find_matches(input)
 
 
@@ -338,5 +344,6 @@ def main(argv, version):
 
 
 if __name__ == '__main__':
-    assert (3, 6) < sys.version_info < (4, 0)
-    main(sys.argv[1:], '0.0.3-alpha')
+    assert (3, 6) <= sys.version_info < (4, 0), (
+        f"Unsupported Python version {sys.version} - at least 3.6 is required")
+    main(sys.argv[1:], '0.5')

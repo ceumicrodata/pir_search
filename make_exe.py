@@ -4,7 +4,8 @@ import os
 import stat
 import sys
 
-assert (3, 6) < sys.version_info < (4, 0)
+assert (3, 6) <= sys.version_info < (4, 0), (
+    f"Unsupported Python version {sys.version} - at least 3.6 is required")
 
 
 WINDOWS_ZIPEXE_PREFIX = b'\r\n'.join((

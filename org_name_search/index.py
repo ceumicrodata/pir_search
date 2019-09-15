@@ -264,7 +264,9 @@ class NGramIndex:
         """
         Select the best matching text from text_options.
 
-        Note, that it is not intended as a general search, as text_options is expected to be a small list, and exactly one option is returned.
+        Note, that it is not intended as a general search,
+        as text_options is expected to be a small list,
+        and exactly one option is returned.
         """
 
         if not text_options:
