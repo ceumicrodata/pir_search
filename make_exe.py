@@ -1,8 +1,10 @@
 #!/usr/bin/env python
-from __future__ import unicode_literals, print_function
 import argparse
 import os
 import stat
+import sys
+
+assert (3, 6) < sys.version_info < (4, 0)
 
 
 WINDOWS_ZIPEXE_PREFIX = b'\r\n'.join((
