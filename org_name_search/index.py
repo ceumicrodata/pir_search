@@ -190,11 +190,15 @@ class NGramIndex:
                     # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
                     # shift freq to lower the impact of very rare, potentially bogus ngrams
                     tfidf = 1.0 / (freq + self.idf_shift)
-                    # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
                     max_score += tfidf
                     for pir in pirs:
                         pir_score[pir] += tfidf
                         pir_ngrams[pir] += 1
+                else:
+                    # this prevents the strange phenomenon, that a lorem ipsum text has 1.0 score
+                    # since scores are normalized, a query containing an ngram that is not present in the index
+                    # will not have 1.0 score for any match
+                    max_score += 0.1 / (1.0 + self.idf_shift)
 
         if max_score <= 0:
             return []
@@ -257,7 +261,6 @@ class NGramIndex:
                 # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
                 # shift freq to lower the impact of very rare, potentially bogus ngrams
                 tfidf += 1.0 / (freq + self.idf_shift)
-                # tfidf = math.log(len(self.pir_to_details) / float(max(freq, 1)))
         return tfidf
 
     def select(self, query_ngrams, text_options):
