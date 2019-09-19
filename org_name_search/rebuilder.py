@@ -1,9 +1,5 @@
 # coding: utf-8
 # FIXME: rename to tagre
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 
 import re
 
@@ -71,7 +67,7 @@ def no_log(*args):
     pass
 
 
-class SequentialWordDropper:
+class _SequentialWordDropper:
 
     def __init__(self, text):
         self._words = WORD.finditer(text)
@@ -116,7 +112,7 @@ def find_keywords(pattern, text, log=no_log):
 
     Returns keywords and remaining text.
     '''
-    swd = SequentialWordDropper(text)
+    swd = _SequentialWordDropper(text)
     keywords = set()
     for match in pattern.finditer(text):
         keywords.update(match.keys)
@@ -184,6 +180,7 @@ def at_end(pattern, wrap=protect):
 def followed_by(re):
     '''positive lookahead'''
     return RE('(?={})'.format(re))
+
 
 def not_followed_by(re):
     '''negative lookahead'''

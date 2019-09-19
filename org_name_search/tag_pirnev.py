@@ -1,8 +1,4 @@
 # coding: utf-8
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 
 import sys
 
@@ -13,15 +9,6 @@ from .normalize import normalize
 from . import tagger
 
 
-def uprint(*msgs):
-    for i, msg in enumerate(msgs):
-        if i:
-            sys.stdout.write(' ')
-        sys.stdout.write(unicode(msg).encode('utf-8'))
-    sys.stdout.write('\n')
-    sys.stdout.flush()
-
-
 def fmt(args):
     msg = ''
     for arg in args:
@@ -29,7 +16,7 @@ def fmt(args):
         if isinstance(arg, int):
             msg += ' ' * max(1, arg - len(msg)) + '<> '
         else:
-            msg += unicode(arg)
+            msg += str(arg)
     return msg[1:].encode('utf-8')
 
 
@@ -43,6 +30,7 @@ def format_set(set):
     if set:
         return ', '.join(sorted(set))
     return '*'
+
 
 def main():
     pirnev = (

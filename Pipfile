@@ -1,0 +1,17 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+nose = "*"
+rope = "*"
+pylint = "*"
+vulture = "*"
+
+[packages]
+petl = "==1.1.0"
+attrs = "==19.1.0"
+
+[requires]
+python_version = "3.6"

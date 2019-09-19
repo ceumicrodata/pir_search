@@ -1,10 +1,4 @@
 # coding: utf-8
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
-
-import re
 
 from .rebuilder import (
     RE,
@@ -126,7 +120,8 @@ ORG_TYPE = any_of(
             'kulturális',
             'könyvtár')),
 
-    group('tudomany',
+    group(
+        'tudomany',
         any_of(
             'tudomány',
             'magyar tudományos akadémia',

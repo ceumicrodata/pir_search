@@ -1,112 +1,68 @@
 # coding: utf-8
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
-
 
 import collections
+from datetime import datetime
+import contextlib
 import functools
-import itertools
-import operator
-import os
-import petl
+# import math
 
 from .normalize import normalize, simplify_accents
-from .settlements import SettlementMap  # read_settlements, make_settlement_variant_map, extract_settlements
-from . import tagger
-from . import data
-
-PirDetails = collections.namedtuple('PirDetails', 'names settlements tax_id pir')
+from .data import PirDetails
 
 
-def load_pir_details(path='data'):
-    def read(csv_file):
-        return petl.fromcsv(data.csv_open(path + '/' + csv_file), encoding='utf-8', errors='strict')
-
-    tzsazon = (
-        read('TZSAZON.csv')
-        .cut('TZSAZON_ID', 'PIR')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('PIR', int, failonerror=True)
-        .data())
-    tzsazon_id_to_pir = {tzsazon_id: pir for tzsazon_id, pir in tzsazon}
+@contextlib.contextmanager
+def timing(what):
+    start = datetime.now()
+    try:
+        yield
+    finally:
+        end = datetime.now()
+        print(f"{what} took {end - start}")
 
 
-    ado = set(
-        read('ADO.csv')
-        .cut('TZSAZON_ID', 'ADOSZAM')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('ADOSZAM', lambda adoszam: adoszam[:8], failonerror=True)
-        .data())
-    assert len(ado) == len({tzsazon for tzsazon, _ in ado}), 'BAD input: one PIR multiple tax id'
-    ado = dict(ado)
-
-    pir_to_details = {
-        pir: new_details(tax_id=ado.get(tzsazon), pir=pir)
-        for tzsazon, pir in tzsazon_id_to_pir.items()
-    }
-
-    cim = (
-        read('CIM.csv')
-        .cut('TZSAZON_ID', 'CTELEP')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('CTELEP', 'lower')
-        .data())
-    for tzsazon, telep in cim:
-        if telep:
-            pir = tzsazon_id_to_pir[tzsazon]
-            pir_to_details[pir].settlements.add(telep)
-
-    pirnev = (
-        read('PIRNEV.csv')
-        .cut('TZSAZON_ID', 'NEV')
-        .convert('TZSAZON_ID', int, failonerror=True)
-        .convert('NEV', 'lower')
-        .data())
-    for tzsazon, nev in pirnev:
-        pir = tzsazon_id_to_pir[tzsazon]
-        pir_to_details[pir].names.add(nev)
-
-    return dict(pir_to_details)
+@contextlib.contextmanager
+def notiming(_):
+    yield
 
 
-class Parser(SettlementMap):
-
-    def parse(self, org_name):
-        normalized_name = normalize(org_name)
-        settlements, name_wo_settlements = self.extract_settlements(normalized_name)
-        keywords, new_name = tagger.extract_org_types(name_wo_settlements)
-        rest = new_name.split()
-        return settlements, keywords, rest
+def timed(f):
+    def timed(*args, **kwargs):
+        with timing(f"{f.__name__}(*{args!r}, **{kwargs!r})"):
+            return f(*args, **kwargs)
+    return timed
 
 
-def ngrams(text, n=3, max_errors=1):
-    padding = ' ' * (n - 1)
-    padded = padding + text + padding
-    for i in range(len(padded) - n + 1):
-        for j in range(max_errors * 2 + 1):
-            yield i - max_errors + j, padded[i:i+n]
+def ngrams(text, n=3):
+    """
+    Generate sequence of ngrams for text.
+    """
+    return set(text[i:i+n] for i in range(len(text) - n + 1))
 
 
-def ngram_text(text, max_errors):
+def union_ngrams(text, n=3):
+    """
+    Generate set of ngrams for words in text.
+    """
     text_ngrams = set()
     for word in simplify_accents(normalize(text)).split():
-        text_ngrams |= set(ngrams(word, max_errors=max_errors))
+        word_ngrams = set(ngrams(word, n))
+        padded = f' {word} '
+        word_ngrams.add(padded[:n+1])
+        word_ngrams.add(padded[-n-1:])
+        text_ngrams |= word_ngrams
     return text_ngrams
-
 
 
 # name, names -> best_match_name, "match_score"
 # FIXME: details -> pir_details
 
 class Query:
-    def __init__(self, name, settlement, parse, max_errors=2):
+    def __init__(self, name: str, settlement: str, parse, date: datetime.date =None):
         self.name = name
         self.settlement = settlement
         self.parse = parse
-        self.max_errors = max_errors
-        self.name_ngrams = ngram_text(name, self.max_errors) | (ngram_text(settlement, max_errors) if settlement else set())
+        self.date: datetime.date = date
+        self.name_ngrams = union_ngrams(name) | (union_ngrams(settlement) if settlement else set())
 
     @property
     def parsed(self):
@@ -116,67 +72,36 @@ class Query:
         diff12 = len(ngrams1 - ngrams2)
         diff21 = len(ngrams2 - ngrams1)
         union = max(1, len(ngrams1.union(ngrams2)))
-        xpdiff = 3
-        xpunion = 3
+        exp_diff = 3
+        exp_union = 3
         # penalize differences on either side, but penalize extremely for differences on both sides
-        # see http://www.livephysics.com/tools/mathematical-tools/online-3-d-function-grapher/?xmin=0&xmax=100&ymin=0&ymax=100&zmin=0&zmax=1&f=1-%28x%5E3%2By%5E3%2B%28x*y%29%5E2%29%2F100%5E3
-        similarity = 1 - ((diff12 ** xpdiff + diff21 ** xpdiff + (diff12 * diff21) ** 2) / union ** xpunion)
+        # see https://www.geogebra.org/3d on positive (x, y) values, with these formulas:
+        # a(x,y)= 1 - (x^3 + y^3 + (x*y)^3/10)/(20^3)
+        # eq1:IntersectPath(xOyPlane,a)
+        # similarity = 1 - ((diff12 ** exp_diff + diff21 ** exp_diff + (diff12 * diff21) ** 3 / 10) / union ** exp_union)
+        similarity = 1 - ((diff12 ** exp_diff + diff21 ** exp_diff + (diff12 * diff21) ** 2) / union ** exp_union)
         return max(0, similarity)
 
+    # @timed
     def similarity(self, match, settlement):
         if not self.name:
             return 0
 
-        match_ngrams = ngram_text(match, self.max_errors)
+        match_ngrams = union_ngrams(match)
         base_score = self._similarity(self.name_ngrams, match_ngrams)
         if not settlement:
             return base_score
 
-        settlement_ngrams = ngram_text(settlement, self.max_errors)
+        settlement_ngrams = union_ngrams(settlement)
         extended_score = self._similarity(self.name_ngrams, match_ngrams | settlement_ngrams)
+        # base_score = len(match_ngrams & self.name_ngrams)
+        # extended_score = len((match_ngrams | settlement_ngrams) & self.name_ngrams)
         return max(base_score, extended_score)
 
     def __unicode__(self):
         return 'Query({!r}, {!r}): {}'.format(self.name, self.settlement, self.parsed)
 
     __repr__ = __str__ = __unicode__
-
-
-
-@functools.total_ordering
-class SearchResult:
-    def __init__(self, query, details, err):
-        self.query_text = query.name
-        self.details = details
-        self.err = err
-        self.score, self.match_text, self.settlement = self._score_best(query, details)
-
-    def _score_best(self, query, details):
-        return max(
-            (query.similarity(name, settlement), name, settlement)
-            for name in details.names
-            for settlement in details.settlements | {''})
-
-    def __lt__(self, other):
-        return (
-            (self.err > other.err) or
-            (self.err == other.err and self.score < other.score))
-
-    def __eq__(self, other):
-        return (self.err, self.score) == (other.err, other.score)
-
-    def __unicode__(self):
-        return 'SearchResult({!r}, {!r}, {!r})'.format(self.match_text, self.settlement, self.score)
-
-    __repr__ = __str__ = __unicode__
-
-
-def new_details(names=None, settlements=None, pir=None, tax_id=None):
-    return PirDetails(
-        names=names or set(),
-        settlements=settlements or set(),
-        pir=pir,
-        tax_id=tax_id)
 
 
 @functools.total_ordering
@@ -191,7 +116,7 @@ class NoResult:
     # diagnostic
     err = 0
     key = None
-    details = new_details()
+    details = PirDetails()
 
     def __lt__(self, other):
         return other is not self
@@ -207,45 +132,156 @@ class NoResult:
 NoResult = NoResult()
 
 
-MISSING = '*'
+@functools.total_ordering
+class NGramSearchResult:
+    def __init__(self, query, details, score, err, match_text, match_settlement):
+        self.query_text = query.name
+        self.details = details
+        assert err >= 0
+        # print(score, err, match_text)
+        assert 0 <= score <= 1
+        self.err = err
+        self.score = score
+        self.match_text = match_text
+        self.settlement = match_settlement
 
-class ErodedIndex:
-    def __init__(self, pir_to_details, parse, max_errors=2):
+    def __lt__(self, other):
+        return (self.score, -self.err) < (other.score, -other.err)
+
+    def __eq__(self, other):
+        return (self.score, self.err) == (other.score, other.err)
+
+    def __unicode__(self):
+        return 'NGramSearchResult({!r}, {!r}, {!r})'.format(self.match_text, self.settlement, self.score)
+
+    __repr__ = __str__ = __unicode__
+
+
+class NGramIndex:
+    def __init__(self, pir_to_details, parse, idf_shift=0):
         self.parse = parse
-        self.max_errors = max_errors
+        assert idf_shift >= 0
+        self.idf_shift = idf_shift
         self.pir_to_details = pir_to_details
-        self.index = collections.defaultdict(set)
+        self.index = collections.defaultdict(set)  # ngram -> set(pirs)
+        self.ngram_counts = collections.Counter()
 
-        for pir, details in self.pir_to_details.items():
-            for name in details.names:
-                settlements, tags, rest = parse(name)
-                for err, eroded in self.hashes(settlements | details.settlements, tags, rest):
-                    if err <= self.max_errors:
-                        self.index[eroded].add((err, pir))
+        def detail_ngrams(pir_details):
+            text = ' '.join(pir_details.names) + ' ' + ' '.join(pir_details.settlements)
+            text = ' '.join(sorted(set(text.split())))
+            return union_ngrams(text)
+        for pir, pir_details in self.pir_to_details.items():
+            ngrams = detail_ngrams(pir_details)
+            for ngram in ngrams:
+                self.index[ngram].add(pir)
+            self.ngram_counts.update(ngrams)
         self.index = dict(self.index)
 
-    def hashes(self, settlements, tags, rest):
-        m = {MISSING}
-        for eroded in itertools.product(m | settlements, m | tags, m | set(rest)):
-            err = eroded.count(MISSING)
-            yield err, u'{}_{}_{}'.format(*eroded)
-
     def search(self, query, max_results=10):
-        err, pirs = self._search_parsed(*query.parsed)
-        return sorted(
-            (
-                SearchResult(query, details=self.pir_to_details[pir], err=err)
-                for pir in pirs),
-            reverse=True)[:max_results]
+        # pir_score = pir -> sum(tfidf(ngram) for ngram in query_ngrams)
+        with notiming('tfidf'):
+            max_score = 0
+            pir_score = collections.defaultdict(float)
+            pir_ngrams = collections.defaultdict(int)
+            for ngram in query.name_ngrams:
+                freq = self.ngram_counts[ngram]
+                if freq:
+                    pirs = self.index.get(ngram, ())
+                    # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
+                    # shift freq to lower the impact of very rare, potentially bogus ngrams
+                    tfidf = 1.0 / (freq + self.idf_shift)
+                    max_score += tfidf
+                    for pir in pirs:
+                        pir_score[pir] += tfidf
+                        pir_ngrams[pir] += 1
+                else:
+                    # this prevents the strange phenomenon, that a lorem ipsum text has 1.0 score
+                    # since scores are normalized, a query containing an ngram that is not present in the index
+                    # will not have 1.0 score for any match
+                    max_score += 0.1 / (1.0 + self.idf_shift)
 
-    def _search_parsed(self, settlements, keywords, rest):
-        all_err_hashes = sorted(self.hashes(settlements, keywords, rest))
-        err = 0
-        pirs = set()
-        for err, err_hashes in itertools.groupby(all_err_hashes, operator.itemgetter(0)):
-            hashes = {hash for _, hash in err_hashes}
-            for hash in hashes:
-                pirs.update(pir for _, pir in self.index.get(hash, ()))
-            if pirs:
-                break
-        return err, pirs
+        if max_score <= 0:
+            return []
+
+        def search_result(pir):
+            details = self.pir_to_details[pir]
+            # score is normalized:
+            score = pir_score[pir] / max_score
+            match_text = self.select(query.name_ngrams, details.names)
+            if query.settlement in details.settlements:
+                settlement = query.settlement
+            else:
+                settlement = self.select(query.name_ngrams, details.settlements)
+            # error is tfidf of extra ngrams in match
+            match = match_text
+            if settlement:
+                match += ' ' + settlement
+            err = self._tfidf(union_ngrams(match) - query.name_ngrams)
+            return (
+                NGramSearchResult(
+                    query,
+                    details=details,
+                    score=score,
+                    err=err,
+                    match_text=match_text,
+                    match_settlement=settlement))
+
+        # drop matches that were not valid at query time
+        if query.date:
+            for pir in list(pir_score):
+                if not self.pir_to_details[pir].is_valid_at(query.date):
+                    del pir_score[pir]
+
+        # features to use for deciding on match quality (much later, when evaluating matches - if there is any at all):
+        #  - tfidf of ngrams
+        #  - length of query - in number of ngrams
+        #  - match / (match + non-match) ratio
+        #  - parsed query text & parsed matches
+
+        # pirs with highest scores
+        with notiming('select results'):
+            # print(f'{len(pir_score)}')
+
+            # drop matches, that have low query matching score: they are not matches
+            min_score = max_score / 4.0
+            top_scores = sorted(set(score for score in pir_score.values() if score > min_score), reverse=True)[:max_results]
+            if not top_scores:
+                return []
+            min_score = top_scores[-1]
+
+            pirs = (pir for pir, score in pir_score.items() if score >= min_score)
+            search_results = (search_result(pir) for pir in pirs)
+            return sorted(search_results, reverse=True)[:max_results]
+
+    def _tfidf(self, ngrams):
+        tfidf = 0.0
+        for ngram in ngrams:
+            freq = self.ngram_counts[ngram]
+            if freq:
+                # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
+                # shift freq to lower the impact of very rare, potentially bogus ngrams
+                tfidf += 1.0 / (freq + self.idf_shift)
+        return tfidf
+
+    def select(self, query_ngrams, text_options):
+        """
+        Select the best matching text from text_options.
+
+        Note, that it is not intended as a general search,
+        as text_options is expected to be a small list,
+        and exactly one option is returned.
+        """
+
+        if not text_options:
+            return ''
+
+        _score, best_text = (
+            sorted(
+                ((self._tfidf(union_ngrams(text) & query_ngrams), text)
+                    for text in text_options),
+                reverse=True)[0])
+        return best_text
+
+
+Index = NGramIndex
+# print(union_ngrams("d.r. union ngrams"))

@@ -1,13 +1,9 @@
 # coding: utf-8
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 
 import petl
 
 from . import data
-from .normalize import normalize, simplify_accents
+from .normalize import simplify_accents
 
 
 def import_ksh_settlements(xlsfilename, output_csv):
