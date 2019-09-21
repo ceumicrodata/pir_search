@@ -248,7 +248,8 @@ def parse_args(argv, version):
         help=('''input field containing the date of record,
         when present only organizations live at the time are considered as matches.
         This greatly improves match quality (ignores/returns less ambiguous matches).
-        If given, the field values must be in YYYY-MM-DD format (ISO 8601).'''))
+        If given, the field values must be in one of YYYY or YYYY-MM-DD or YYYYMMDD formats.
+        When a value is not in one of the known formats, it will be ignored.'''))
 
     parser.add_argument(
         '--pir', dest='pir_field', default='pir',

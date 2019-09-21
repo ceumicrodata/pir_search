@@ -31,12 +31,16 @@ else:
 
 def parse_date(text: str) -> datetime.date:
     if text:
-        try:
-            return datetime.date(int(text[:4]), int(text[4:6]), int(text[6:]))
-        except ValueError:
-            # print(text)
-            pass
+        for format in ('%Y-%m-%d', '%Y%m%d', '%Y'):
+            try:
+                return datetime.datetime.strptime(text, format).date()
+            except ValueError:
+                pass
 
+assert parse_date('2004') == datetime.date(2004, 1, 1)
+assert parse_date('2004-12-28') == datetime.date(2004, 12, 28)
+assert parse_date('2004-12-38') is None
+assert parse_date('20041228') == datetime.date(2004, 12, 28)
+assert parse_date('20041228invalid') is None
 
-
-__all__ = ['csv_open', 'PirDetails', 'load_pir_to_details']
+__all__ = ['csv_open', 'PirDetails', 'load_pir_to_details', 'parse_date']
