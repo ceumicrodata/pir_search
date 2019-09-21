@@ -4,6 +4,13 @@ import json
 from typing import Set
 
 
+def date_from_isodate(iso_8601_date):
+    return datetime.datetime.strptime(iso_8601_date, '%Y-%m-%d').date()
+
+
+assert date_from_isodate('2018-12-28') == datetime.date(2018, 12, 28)
+
+
 @attr.s(auto_attribs=True)
 class PirDetails:
     pir: str = None
@@ -27,7 +34,7 @@ def load_pir_to_details(path):
         d = dict(details_dict)
         def todate(d, key):
             if d[key]:
-                d[key] = datetime.date.fromisoformat(d[key])
+                d[key] = date_from_isodate(d[key])
         todate(d, 'start_date')
         todate(d, 'end_date')
         def convert(d, key, type):
