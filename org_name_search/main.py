@@ -347,4 +347,4 @@ def main(argv, version):
 if __name__ == '__main__':
     assert (3, 6) <= sys.version_info < (4, 0), (
         f"Unsupported Python version {sys.version} - at least 3.6 is required")
-    main(sys.argv[1:], '0.5.0')
+    main(sys.argv[1:], '0.5.1')
