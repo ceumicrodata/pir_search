@@ -209,30 +209,6 @@ class NGramIndex:
         if max_score <= 0:
             return []
 
-        def search_result(pir):
-            details = self.pir_to_details[pir]
-            match_text = self.select(query.name_ngrams, details.names)
-            if query.settlement in details.settlements:
-                settlement = query.settlement
-            else:
-                settlement = self.select(query.name_ngrams, details.settlements)
-            # error is tfidf of extra ngrams in match
-            match = match_text
-            if settlement:
-                match += ' ' + settlement
-            # score, err is normalized (<= 1.0, though can be negative!):
-            score = pir_score[pir] / max_score
-            score -= len(query.name_ngrams - union_ngrams(match)) / (1 + self.idf_shift) / max_score
-            err = len(union_ngrams(match) - query.name_ngrams)  / (1 + self.idf_shift) / max_score
-            return (
-                NGramSearchResult(
-                    query,
-                    details=details,
-                    score=score,
-                    err=err,
-                    match_text=match_text,
-                    match_settlement=settlement))
-
         # drop matches that were not valid at query time
         if query.date:
             for pir in list(pir_score):
@@ -257,11 +233,35 @@ class NGramIndex:
             min_score = top_scores[-1]
 
             pirs = (pir for pir, score in pir_score.items() if score >= min_score)
-            search_results = (search_result(pir) for pir in pirs)
+            search_results = (self.get_search_result(query, pir, pir_score, max_score) for pir in pirs)
             # drop overly negative matches - they turned out to be not so great match
             # also makes the returned score to be between -1 and 1
             search_results = (r for r in search_results if r.score > -1.0)
             return sorted(search_results, reverse=True)[:max_results]
+
+    def get_search_result(self, query, pir, pir_score, max_score):
+        details = self.pir_to_details[pir]
+        match_text = self.select(query.name_ngrams, details.names)
+        if query.settlement in details.settlements:
+            settlement = query.settlement
+        else:
+            settlement = self.select(query.name_ngrams, details.settlements)
+        # error is tfidf of extra ngrams in match
+        match = match_text
+        if settlement:
+            match += ' ' + settlement
+        # score, err is normalized (<= 1.0, though can be negative!):
+        score = pir_score[pir] / max_score
+        score -= len(query.name_ngrams - union_ngrams(match)) / (1 + self.idf_shift) / max_score
+        err = len(union_ngrams(match) - query.name_ngrams)  / (1 + self.idf_shift) / max_score
+        return (
+            NGramSearchResult(
+                query,
+                details=details,
+                score=score,
+                err=err,
+                match_text=match_text,
+                match_settlement=settlement))
 
     def _tfidf(self, ngrams):
         tfidf = 0.0
