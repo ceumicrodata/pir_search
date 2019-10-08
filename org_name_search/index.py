@@ -54,7 +54,7 @@ def union_ngrams(text, n=3):
 
 
 # name, names -> best_match_name, "match_score"
-# FIXME: details -> pir_details
+# TODO: rename details -> pir_details
 
 class Query:
     def __init__(self, name: str, settlement: str, parse, date: datetime.date =None):
@@ -139,14 +139,20 @@ class NGramSearchResult:
         self.details = details
         assert err >= 0
         # print(score, err, match_text)
-        assert 0 <= score <= 1
+        # assert 0 <= score <= 1
         self.err = err
         self.score = score
         self.match_text = match_text
         self.settlement = match_settlement
 
     def __lt__(self, other):
-        return (self.score, -self.err) < (other.score, -other.err)
+        score_diff = (self.score - self.err) - (other.score - other.err)
+        if score_diff < 0:
+            return True
+        elif score_diff > 0:
+            return False
+
+        return self.score < other.score
 
     def __eq__(self, other):
         return (self.score, self.err) == (other.score, other.err)
@@ -205,8 +211,6 @@ class NGramIndex:
 
         def search_result(pir):
             details = self.pir_to_details[pir]
-            # score is normalized:
-            score = pir_score[pir] / max_score
             match_text = self.select(query.name_ngrams, details.names)
             if query.settlement in details.settlements:
                 settlement = query.settlement
@@ -216,7 +220,10 @@ class NGramIndex:
             match = match_text
             if settlement:
                 match += ' ' + settlement
-            err = self._tfidf(union_ngrams(match) - query.name_ngrams)
+            # score, err is normalized (<= 1.0, though can be negative!):
+            score = pir_score[pir] / max_score
+            score -= len(query.name_ngrams - union_ngrams(match)) / (1 + self.idf_shift) / max_score
+            err = len(union_ngrams(match) - query.name_ngrams)  / (1 + self.idf_shift) / max_score
             return (
                 NGramSearchResult(
                     query,
@@ -251,6 +258,9 @@ class NGramIndex:
 
             pirs = (pir for pir, score in pir_score.items() if score >= min_score)
             search_results = (search_result(pir) for pir in pirs)
+            # drop overly negative matches - they turned out to be not so great match
+            # also makes the returned score to be between -1 and 1
+            search_results = (r for r in search_results if r.score > -1.0)
             return sorted(search_results, reverse=True)[:max_results]
 
     def _tfidf(self, ngrams):
