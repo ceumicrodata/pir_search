@@ -211,7 +211,7 @@ class NGramIndex:
         search_results = (self.get_search_result(query, pir, pir_score, max_score) for pir in pirs)
         # drop overly negative matches - they turned out to be not so great match
         # also makes the returned score to be between -1 and 1
-        search_results = (r for r in search_results if r.score > -1.0)
+        search_results = (r for r in search_results if r.score >= 0.)
         return sorted(search_results, reverse=True)[:max_results]
 
     def get_search_result(self, query, pir, pir_score, max_score):
@@ -229,6 +229,9 @@ class NGramIndex:
         score = pir_score[pir] / max_score
         score -= len(query.name_ngrams - union_ngrams(match)) / (1 + self.idf_shift) / max_score
         err = len(union_ngrams(match) - query.name_ngrams)  / (1 + self.idf_shift) / max_score
+        # further normalize, so that all interesting cases have score between [0-1]
+        score = (score + 1.) / 2.
+        err = (err + 1.) / 2.
         return (
             NGramSearchResult(
                 query,
