@@ -33,6 +33,9 @@ def union_ngrams(text, n=3):
 # TODO: rename details -> pir_details
 
 class Query:
+    # TODO: expand all caps words to letters separated with dot-space ('. ' )
+    # TODO: . stops ngram generation (end of word is skipped)
+    # TODO: register number .-s so that scoring algorythm can accomodate presensce of acronyms
     def __init__(self, name: str, settlement: str, parse, date: datetime.date =None):
         self.name = name
         self.settlement = settlement
@@ -194,6 +197,7 @@ class NGramIndex:
         #  - length of query - in number of ngrams
         #  - match / (match + non-match) ratio
         #  - parsed query text & parsed matches
+        #  - presence of acronyms in query
 
         # pirs with highest scores
         # drop matches, that have low query matching score: they are not matches
