@@ -2,34 +2,10 @@
 
 import collections
 from datetime import datetime
-import contextlib
 import functools
-# import math
 
 from .normalize import normalize, simplify_accents
 from .data import PirDetails
-
-
-@contextlib.contextmanager
-def timing(what):
-    start = datetime.now()
-    try:
-        yield
-    finally:
-        end = datetime.now()
-        print(f"{what} took {end - start}")
-
-
-@contextlib.contextmanager
-def notiming(_):
-    yield
-
-
-def timed(f):
-    def timed(*args, **kwargs):
-        with timing(f"{f.__name__}(*{args!r}, **{kwargs!r})"):
-            return f(*args, **kwargs)
-    return timed
 
 
 def ngrams(text, n=3):
@@ -82,7 +58,6 @@ class Query:
         similarity = 1 - ((diff12 ** exp_diff + diff21 ** exp_diff + (diff12 * diff21) ** 2) / union ** exp_union)
         return max(0, similarity)
 
-    # @timed
     def similarity(self, match, settlement):
         if not self.name:
             return 0
@@ -185,26 +160,25 @@ class NGramIndex:
 
     def search(self, query, max_results=10):
         # pir_score = pir -> sum(tfidf(ngram) for ngram in query_ngrams)
-        with notiming('tfidf'):
-            max_score = 0
-            pir_score = collections.defaultdict(float)
-            pir_ngrams = collections.defaultdict(int)
-            for ngram in query.name_ngrams:
-                freq = self.ngram_counts[ngram]
-                if freq:
-                    pirs = self.index.get(ngram, ())
-                    # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
-                    # shift freq to lower the impact of very rare, potentially bogus ngrams
-                    tfidf = 1.0 / (freq + self.idf_shift)
-                    max_score += tfidf
-                    for pir in pirs:
-                        pir_score[pir] += tfidf
-                        pir_ngrams[pir] += 1
-                else:
-                    # this prevents the strange phenomenon, that a lorem ipsum text has 1.0 score
-                    # since scores are normalized, a query containing an ngram that is not present in the index
-                    # will not have 1.0 score for any match
-                    max_score += 0.1 / (1.0 + self.idf_shift)
+        max_score = 0
+        pir_score = collections.defaultdict(float)
+        pir_ngrams = collections.defaultdict(int)
+        for ngram in query.name_ngrams:
+            freq = self.ngram_counts[ngram]
+            if freq:
+                pirs = self.index.get(ngram, ())
+                # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
+                # shift freq to lower the impact of very rare, potentially bogus ngrams
+                tfidf = 1.0 / (freq + self.idf_shift)
+                max_score += tfidf
+                for pir in pirs:
+                    pir_score[pir] += tfidf
+                    pir_ngrams[pir] += 1
+            else:
+                # this prevents the strange phenomenon, that a lorem ipsum text has 1.0 score
+                # since scores are normalized, a query containing an ngram that is not present in the index
+                # will not have 1.0 score for any match
+                max_score += 0.1 / (1.0 + self.idf_shift)
 
         if max_score <= 0:
             return []
@@ -222,22 +196,19 @@ class NGramIndex:
         #  - parsed query text & parsed matches
 
         # pirs with highest scores
-        with notiming('select results'):
-            # print(f'{len(pir_score)}')
+        # drop matches, that have low query matching score: they are not matches
+        min_score = max_score / 4.0
+        top_scores = sorted(set(score for score in pir_score.values() if score > min_score), reverse=True)[:max_results]
+        if not top_scores:
+            return []
+        min_score = top_scores[-1]
 
-            # drop matches, that have low query matching score: they are not matches
-            min_score = max_score / 4.0
-            top_scores = sorted(set(score for score in pir_score.values() if score > min_score), reverse=True)[:max_results]
-            if not top_scores:
-                return []
-            min_score = top_scores[-1]
-
-            pirs = (pir for pir, score in pir_score.items() if score >= min_score)
-            search_results = (self.get_search_result(query, pir, pir_score, max_score) for pir in pirs)
-            # drop overly negative matches - they turned out to be not so great match
-            # also makes the returned score to be between -1 and 1
-            search_results = (r for r in search_results if r.score > -1.0)
-            return sorted(search_results, reverse=True)[:max_results]
+        pirs = (pir for pir, score in pir_score.items() if score >= min_score)
+        search_results = (self.get_search_result(query, pir, pir_score, max_score) for pir in pirs)
+        # drop overly negative matches - they turned out to be not so great match
+        # also makes the returned score to be between -1 and 1
+        search_results = (r for r in search_results if r.score > -1.0)
+        return sorted(search_results, reverse=True)[:max_results]
 
     def get_search_result(self, query, pir, pir_score, max_score):
         details = self.pir_to_details[pir]
