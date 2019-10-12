@@ -89,7 +89,7 @@ class OrgNameMatcher(m.OrgNameMatcher):
 
 find_matches = OrgNameMatcher.run
 INPUT_FIELDS = m.InputFields('org_name', 'settlement', 'date')
-OUTPUT_FIELDS = m.OutputFields('pir', 'pir_name', 'pir_score', 'pir_settlement', 'taxid')
+OUTPUT_FIELDS = m.OutputFields('pir', 'pir_name', 'pir_score', 'pir_err', 'pir_settlement', 'taxid')
 PI_R = '31415926'
 BADPI_R = '30104'
 TATA_PI_R = PI_R + '1414'
@@ -193,10 +193,10 @@ class Test_functionality(TestCase):
 
     def test_pir_name_field_is_set_to_best_match(self):
         match = find1('megévesztő minisztérium', 'budapest', y(2012), self.pir_to_details)
-        self.assertEqual('megévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
+        self.assertEqual('megévesztő minisztérium', match[OUTPUT_FIELDS.name])
 
         match = find1('megtévesztő minisztérium', 'budapest', y(2012), self.pir_to_details)
-        self.assertEqual('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
+        self.assertEqual('megtévesztő minisztérium', match[OUTPUT_FIELDS.name])
 
     def test_settlement_decides_between_potential_matches(self):
         match = find1('megévesztő minisztérium', 'tata', y(2012), self.pir_to_details)
@@ -227,6 +227,6 @@ class Test_functionality(TestCase):
                     tax_id='taxid!'),
         }
         match = find1('megtévesztő minisztérium', 'budapest', y(2012), pir_to_details)
-        self.assertEqual('megtévesztő minisztérium', match[OUTPUT_FIELDS.pir_name])
+        self.assertEqual('megtévesztő minisztérium', match[OUTPUT_FIELDS.name])
 
 # long names with many words are still matched (kind of)

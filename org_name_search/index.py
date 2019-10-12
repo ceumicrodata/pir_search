@@ -92,7 +92,7 @@ class NoResult:
     settlement = None
 
     # diagnostic
-    err = 0
+    error = 0
     key = None
     details = PirDetails()
 
@@ -112,19 +112,19 @@ NoResult = NoResult()
 
 @functools.total_ordering
 class NGramSearchResult:
-    def __init__(self, query, details, score, err, match_text, match_settlement):
+    def __init__(self, query, details, score, error, match_text, match_settlement):
         self.query_text = query.name
         self.details = details
-        assert err >= 0
-        # print(score, err, match_text)
+        assert error >= 0
+        # print(score, error, match_text)
         # assert 0 <= score <= 1
-        self.err = err
+        self.error = error
         self.score = score
         self.match_text = match_text
         self.settlement = match_settlement
 
     def __lt__(self, other):
-        score_diff = (self.score - self.err) - (other.score - other.err)
+        score_diff = (self.score - self.error) - (other.score - other.error)
         if score_diff < 0:
             return True
         elif score_diff > 0:
@@ -133,7 +133,7 @@ class NGramSearchResult:
         return self.score < other.score
 
     def __eq__(self, other):
-        return (self.score, self.err) == (other.score, other.err)
+        return (self.score, self.error) == (other.score, other.error)
 
     def __unicode__(self):
         return 'NGramSearchResult({!r}, {!r}, {!r})'.format(self.match_text, self.settlement, self.score)
@@ -221,23 +221,25 @@ class NGramIndex:
             settlement = query.settlement
         else:
             settlement = self.select(query.name_ngrams, details.settlements)
-        # error is tfidf of extra ngrams in match
         match = match_text
         if settlement:
             match += ' ' + settlement
-        # score, err is normalized (<= 1.0, though can be negative!):
+        # score is normalized (<= 1.0, though can be negative!):
         score = pir_score[pir] / max_score
         score -= len(query.name_ngrams - union_ngrams(match)) / (1 + self.idf_shift) / max_score
-        err = len(union_ngrams(match) - query.name_ngrams)  / (1 + self.idf_shift) / max_score
+        # error is tfidf of extra ngrams in match
+        # error does not include settlement
+        # error is also normalized the same way as score, however it can be arbitrary high
+        error = len(union_ngrams(match_text) - query.name_ngrams)  / (1 + self.idf_shift) / max_score
         # further normalize, so that all interesting cases have score between [0-1]
         score = (score + 1.) / 2.
-        err = (err + 1.) / 2.
+        error = error / 2.
         return (
             NGramSearchResult(
                 query,
                 details=details,
                 score=score,
-                err=err,
+                error=error,
                 match_text=match_text,
                 match_settlement=settlement))
 

@@ -25,11 +25,12 @@ class InputFields:
 
 
 class OutputFields:
-    def __init__(self, pir, pir_name, score, settlement, tax_id):
+    def __init__(self, pir, name, score, error, settlement, tax_id):
         self.pir = pir
-        self.pir_name = pir_name
-        self.pir_score = score
-        self.pir_settlement = settlement
+        self.name = name
+        self.score = score
+        self.error = error
+        self.settlement = settlement
         self.tax_id = tax_id
 
     @classmethod
@@ -38,12 +39,13 @@ class OutputFields:
             args.pir_field,
             args.pir_name_field,
             args.pir_score_field,
+            args.pir_err_score_field,
             args.pir_settlement_field,
             args.taxid_field)
 
     @property
     def as_set(self):
-        return {self.pir, self.pir_name, self.pir_score, self.pir_settlement, self.tax_id}
+        return {self.pir, self.name, self.score, self.error, self.settlement, self.tax_id}
 
 
 def field_name(base, i):
@@ -144,7 +146,7 @@ class OrgNameMatcher:
             if len(matches) > 1:
                 score_diff = matches[0].score - matches[1].score
                 if score_diff == 0:
-                    score_diff = matches[1].err - matches[0].err
+                    score_diff = matches[1].error - matches[0].error
                 if score_diff <= self.differentiating_ambiguity:
                     matches = [NoResult]
             return matches
@@ -162,8 +164,12 @@ class OrgNameMatcher:
             output = (
                 input
                 .addfield(
-                    field_name(self.output_fields.pir_score, i),
+                    field_name(self.output_fields.score, i),
                     lambda row: _get_match(row, i).score)
+
+                .addfield(
+                    field_name(self.output_fields.error, i),
+                    lambda row: _get_match(row, i).error)
 
                 .addfield(
                     field_name(self.output_fields.pir, i),
@@ -174,13 +180,13 @@ class OrgNameMatcher:
                     lambda row: _get_match(row, i).details.tax_id)
 
                 .addfield(
-                    field_name(self.output_fields.pir_name, i),
+                    field_name(self.output_fields.name, i),
                     lambda row: _get_match(row, i).match_text)
 
             )
-            if self.output_fields.pir_settlement:
+            if self.output_fields.settlement:
                 output = output.addfield(
-                    field_name(self.output_fields.pir_settlement, i),
+                    field_name(self.output_fields.settlement, i),
                     lambda row: _get_match(row, i).settlement)
 
             return output
@@ -259,6 +265,12 @@ def parse_args(argv, version):
         '--score', dest='pir_score_field', default='pir_score',
         help=(
             '''output field for found pir's similarity score
+            (default: %(default)s)'''))
+
+    parser.add_argument(
+        '--error', dest='pir_err_score_field', default='pir_err',
+        help=(
+            '''output field for score of unmatched text by query (too much from this results in false match)
             (default: %(default)s)'''))
 
     parser.add_argument(
