@@ -72,7 +72,7 @@ class OrgNameMatcher:
     def __init__(self,
             input_fields : InputFields,
             output_fields : OutputFields,
-            parse, extramatches=0, differentiating_ambiguity=0.0, idf_shift=None):
+            parse, extramatches=0, differentiating_ambiguity=0.0, idf_shift=None, stop_words=()):
         """
         input_fields:  define the input stream structure (what is the fields to use for matching)
         output_fields: define the match field names in the generated output stream
@@ -90,6 +90,8 @@ class OrgNameMatcher:
         self.output_fields = output_fields
         self.parse = parse
         self.extramatches = extramatches
+        self.stop_words = {w.lower() for w in stop_words}
+        print(f"stop words: {self.stop_words}")
         if extramatches:
             self.differentiating_ambiguity = -1
         else:
@@ -133,10 +135,11 @@ class OrgNameMatcher:
         org_name_field = self.input_fields.org_name
         settlement_field = self.input_fields.settlement
         date_field = self.input_fields.date
+        stop_words = self.stop_words
 
         def _find_matches(row):
             name = row[org_name_field]
-            if {'bt', 'rt', 'zrt', 'kft'} & set(name.lower().replace('.', ' ').split()):
+            if stop_words & set(name.lower().replace('.', ' ').split()):
                 return [NoResult]
             settlement = row[settlement_field] if settlement_field else None
             date = parse_date(row[date_field]) if date_field else None
@@ -201,8 +204,8 @@ class OrgNameMatcher:
         return output
 
     @classmethod
-    def run(cls, input, input_fields, output_fields, index_data, parse, extramatches=0, differentiating_ambiguity=0, idf_shift=0):
-        finder = cls(input_fields, output_fields, parse, extramatches, differentiating_ambiguity, idf_shift)
+    def run(cls, input, input_fields, output_fields, index_data, parse, extramatches=0, differentiating_ambiguity=0, idf_shift=0, stop_words=()):
+        finder = cls(input_fields, output_fields, parse, extramatches, differentiating_ambiguity, idf_shift, stop_words)
         print(f"Validating input headers {petl.header(input)}")
         finder.validate_input(input)
         print(f"Loading index {index_data}")
@@ -328,6 +331,34 @@ def parse_args(argv, version):
         (default: %(default)s)"""
     )
 
+    HUN_DEFAULT_STOP_WORDS = ('bt', 'rt', 'zrt', 'nyrt', 'kft')
+
+    parser.add_argument(
+        '-x', '--stop-word', dest='stop_words', metavar='STOP-WORD',
+        action='append',
+        default=list(HUN_DEFAULT_STOP_WORDS),
+        help="""Exclude matches for queries that contain these words (default: %(default)s)""")
+
+    class SetHunDefault(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string):
+            setattr(namespace, self.dest, list(HUN_DEFAULT_STOP_WORDS))
+
+    parser.add_argument(
+        '--hun-stop-words', dest='stop_words',
+        action=SetHunDefault,
+        nargs=0,
+        help=f"""Exclude matches for these words: {', '.join(HUN_DEFAULT_STOP_WORDS)}""")
+
+    class ClearArg(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string):
+            setattr(namespace, self.dest, [])
+
+    parser.add_argument(
+        '--clear-stop-words', dest='stop_words', action=ClearArg,
+        nargs=0,
+        help="Make the stop-word list empty"
+    )
+
     parser.add_argument(
         '-V', '--version', action='version',
         version='%(prog)s {}'.format(version),
@@ -351,7 +382,8 @@ def main(argv, version):
         parse=parser.parse,
         extramatches=args.extramatches,
         differentiating_ambiguity=args.differentiating_ambiguity,
-        idf_shift=args.idf_shift)
+        idf_shift=args.idf_shift,
+        stop_words=args.stop_words)
 
     if args.progress:
         matches = matches.progress()
