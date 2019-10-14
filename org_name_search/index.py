@@ -92,7 +92,7 @@ class NoResult:
     settlement = None
 
     # diagnostic
-    error = 0
+    match_error = 0
     key = None
     details = PirDetails()
 
@@ -112,31 +112,24 @@ NoResult = NoResult()
 
 @functools.total_ordering
 class NGramSearchResult:
-    def __init__(self, query, details, score, error, match_text, match_settlement):
+    def __init__(self, query, details, score, match_error, match_text, match_settlement):
         self.query_text = query.name
         self.details = details
-        assert error >= 0
-        # print(score, error, match_text)
-        # assert 0 <= score <= 1
-        self.error = error
+        assert 0 <= score <= 1
+        assert 0 <= match_error
+        self.match_error = match_error
         self.score = score
         self.match_text = match_text
         self.settlement = match_settlement
 
     def __lt__(self, other):
-        score_diff = (self.score - self.error) - (other.score - other.error)
-        if score_diff < 0:
-            return True
-        elif score_diff > 0:
-            return False
-
-        return self.score < other.score
+        return (self.score, -self.match_error) < (other.score, -other.match_error)
 
     def __eq__(self, other):
-        return (self.score, self.error) == (other.score, other.error)
+        return (self.score, self.match_error) == (other.score, other.match_error)
 
     def __unicode__(self):
-        return 'NGramSearchResult({!r}, {!r}, {!r})'.format(self.match_text, self.settlement, self.score)
+        return f'NGramSearchResult({self.match_text!r}, {self.settlement!r}, {self.score} -{self.match_error})'
 
     __repr__ = __str__ = __unicode__
 
@@ -161,27 +154,29 @@ class NGramIndex:
             self.ngram_counts.update(ngrams)
         self.index = dict(self.index)
 
+        average_freq = sum(self.ngram_counts.values()) / len(self.ngram_counts)
+        self.missing_ngram_tfidf = 1 / (average_freq + idf_shift)
+
     def search(self, query, max_results=10):
         # pir_score = pir -> sum(tfidf(ngram) for ngram in query_ngrams)
         max_score = 0
         pir_score = collections.defaultdict(float)
-        pir_ngrams = collections.defaultdict(int)
-        for ngram in query.name_ngrams:
+        idf_shift = self.idf_shift
+        for ngram in sorted(query.name_ngrams):
             freq = self.ngram_counts[ngram]
             if freq:
                 pirs = self.index.get(ngram, ())
                 # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
                 # shift freq to lower the impact of very rare, potentially bogus ngrams
-                tfidf = 1.0 / (freq + self.idf_shift)
+                tfidf = 1.0 / (freq + idf_shift)
                 max_score += tfidf
                 for pir in pirs:
                     pir_score[pir] += tfidf
-                    pir_ngrams[pir] += 1
             else:
-                # this prevents the strange phenomenon, that a lorem ipsum text has 1.0 score
+                # this prevents the strange phenomenon, that a lorem ipsum text has 1.0 score.
                 # since scores are normalized, a query containing an ngram that is not present in the index
                 # will not have 1.0 score for any match
-                max_score += 0.1 / (1.0 + self.idf_shift)
+                max_score += self.missing_ngram_tfidf
 
         if max_score <= 0:
             return []
@@ -212,45 +207,46 @@ class NGramIndex:
         # drop overly negative matches - they turned out to be not so great match
         # also makes the returned score to be between -1 and 1
         search_results = (r for r in search_results if r.score >= 0.)
+        search_results = (r for r in search_results if r.score >= 0.55)
         return sorted(search_results, reverse=True)[:max_results]
 
     def get_search_result(self, query, pir, pir_score, max_score):
         details = self.pir_to_details[pir]
         match_text = self.select(query.name_ngrams, details.names)
-        if query.settlement in details.settlements:
+        if query.settlement and query.settlement in details.settlements:
             settlement = query.settlement
         else:
             settlement = self.select(query.name_ngrams, details.settlements)
         match = match_text
         if settlement:
             match += ' ' + settlement
-        # score is normalized (<= 1.0, though can be negative!):
+        # score is normalized (0 <= score <= 1.0)
         score = pir_score[pir] / max_score
-        score -= len(query.name_ngrams - union_ngrams(match)) / (1 + self.idf_shift) / max_score
-        # error is tfidf of extra ngrams in match
-        # error does not include settlement
-        # error is also normalized the same way as score, however it can be arbitrary high
-        error = len(union_ngrams(match_text) - query.name_ngrams)  / (1 + self.idf_shift) / max_score
-        # further normalize, so that all interesting cases have score between [0-1]
-        score = (score + 1.) / 2.
-        error = error / 2.
+        # query_error is also normalized to be between 0 and 1
+        # query_error = 1 - score
+        non_query_ngrams = union_ngrams(match_text) - query.name_ngrams
+        # match_error intentionally does not include settlement, there is also no upper limit
+        match_error = self._tfidf(non_query_ngrams, self.missing_ngram_tfidf) / max_score
         return (
             NGramSearchResult(
                 query,
                 details=details,
                 score=score,
-                error=error,
+                match_error=match_error,
                 match_text=match_text,
                 match_settlement=settlement))
 
-    def _tfidf(self, ngrams):
+    def _tfidf(self, ngrams, missing_ngram_tfidf=0):
         tfidf = 0.0
-        for ngram in ngrams:
+        idf_shift = self.idf_shift
+        for ngram in sorted(ngrams):
             freq = self.ngram_counts[ngram]
             if freq:
                 # simplification: tf in tfidf is 1.0 (ignore effect of rare ngram repetition within same name)
                 # shift freq to lower the impact of very rare, potentially bogus ngrams
-                tfidf += 1.0 / (freq + self.idf_shift)
+                tfidf += 1.0 / (freq + idf_shift)
+            else:
+                tfidf += missing_ngram_tfidf
         return tfidf
 
     def select(self, query_ngrams, text_options):
@@ -274,4 +270,29 @@ class NGramIndex:
 
 
 Index = NGramIndex
-# print(union_ngrams("d.r. union ngrams"))
+
+
+if __name__ == '__main__':
+    import os
+    path = os.path.expanduser('~/ceu/pir-index/output/index.json')
+    from .data import load_pir_to_details
+
+    index = Index(load_pir_to_details(path=path), parse=(lambda a: a), idf_shift=10.)
+
+    def test(name, settlement=''):
+        print('-' * 64)
+        query = Query(name, settlement=settlement, parse=(lambda a: a), date=None)
+        results = index.search(query)
+        print(query)
+        print(query.name_ngrams)
+        print(results)
+        try:
+            print(results[0].details)
+        except IndexError:
+            pass
+
+    test('veszprémi egyetem')
+    test('semmelweis orvostud.egyetem')
+    test('BERZSENYI TANÁRKÉPZŐ FŐISKOLA')
+    test('debreceni egyetem')
+    test('hipp kft.')

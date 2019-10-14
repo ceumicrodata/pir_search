@@ -25,11 +25,11 @@ class InputFields:
 
 
 class OutputFields:
-    def __init__(self, pir, name, score, error, settlement, tax_id):
+    def __init__(self, pir, name, score, match_error, settlement, tax_id):
         self.pir = pir
         self.name = name
         self.score = score
-        self.error = error
+        self.match_error = match_error
         self.settlement = settlement
         self.tax_id = tax_id
 
@@ -39,13 +39,13 @@ class OutputFields:
             args.pir_field,
             args.pir_name_field,
             args.pir_score_field,
-            args.pir_err_score_field,
+            args.pir_match_error_field,
             args.pir_settlement_field,
             args.taxid_field)
 
     @property
     def as_set(self):
-        return {self.pir, self.name, self.score, self.error, self.settlement, self.tax_id}
+        return {self.pir, self.name, self.score, self.match_error, self.settlement, self.tax_id}
 
 
 def field_name(base, i):
@@ -136,6 +136,8 @@ class OrgNameMatcher:
 
         def _find_matches(row):
             name = row[org_name_field]
+            if {'bt', 'rt', 'zrt', 'kft'} & set(name.lower().replace('.', ' ').split()):
+                return [NoResult]
             settlement = row[settlement_field] if settlement_field else None
             date = parse_date(row[date_field]) if date_field else None
             query = Query(name, settlement, self.parse, date=date)
@@ -146,7 +148,7 @@ class OrgNameMatcher:
             if len(matches) > 1:
                 score_diff = matches[0].score - matches[1].score
                 if score_diff == 0:
-                    score_diff = matches[1].error - matches[0].error
+                    score_diff = matches[1].match_error - matches[0].match_error
                 if score_diff <= self.differentiating_ambiguity:
                     matches = [NoResult]
             return matches
@@ -168,8 +170,8 @@ class OrgNameMatcher:
                     lambda row: _get_match(row, i).score)
 
                 .addfield(
-                    field_name(self.output_fields.error, i),
-                    lambda row: _get_match(row, i).error)
+                    field_name(self.output_fields.match_error, i),
+                    lambda row: _get_match(row, i).match_error)
 
                 .addfield(
                     field_name(self.output_fields.pir, i),
@@ -268,9 +270,9 @@ def parse_args(argv, version):
             (default: %(default)s)'''))
 
     parser.add_argument(
-        '--error', dest='pir_err_score_field', default='pir_err',
+        '--match_error', dest='pir_match_error_field', default='pir_err',
         help=(
-            '''output field for score of unmatched text by query (too much from this results in false match)
+            '''output field for score of matched text not in query (too much from this *MIGHT* result in false match)
             (default: %(default)s)'''))
 
     parser.add_argument(
@@ -299,7 +301,7 @@ def parse_args(argv, version):
         help='''output multiple matches, implies --keep-ambiguous''')
 
     parser.add_argument(
-        '--drop-ambiguous', dest='differentiating_ambiguity', default=0.01, type=float,
+        '--drop-ambiguous', dest='differentiating_ambiguity', default=0.001, type=float,
         help='''report no match for matches where the score difference of the first
         two matches are less than this value
         (default: %(default)s)''')
