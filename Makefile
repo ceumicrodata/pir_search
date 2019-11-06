@@ -3,4 +3,4 @@ build: clean
 
 clean:
 	[ -d .git ]
-	git clean -xdf
+	git clean -Xdf
