@@ -261,11 +261,16 @@ class NGramIndex:
         if not text_options:
             return ''
 
-        _score, best_text = (
+        def fitness(text):
+            text_ngrams = union_ngrams(text)
+            # return self._tfidf(text_ngrams & query_ngrams), -len(text)
+            return self._tfidf(text_ngrams & query_ngrams), -self._tfidf(text_ngrams - query_ngrams) - self._tfidf(query_ngrams - text_ngrams)
+        options_by_fitness = (
             sorted(
-                ((self._tfidf(union_ngrams(text) & query_ngrams), text)
-                    for text in text_options),
-                reverse=True)[0])
+                ((fitness(text), text) for text in text_options),
+                reverse=True))
+        # print(options_by_fitness)
+        _fitness, best_text = options_by_fitness[0]
         return best_text
 
 
