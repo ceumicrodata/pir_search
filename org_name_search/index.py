@@ -224,9 +224,20 @@ class NGramIndex:
         score = pir_score[pir] / max_score
         # query_error is also normalized to be between 0 and 1
         # query_error = 1 - score
-        non_query_ngrams = union_ngrams(match_text) - query.name_ngrams
-        # match_error intentionally does not include settlement, there is also no upper limit
-        match_error = self._tfidf(non_query_ngrams, self.missing_ngram_tfidf) / max_score
+
+        match_ngrams = union_ngrams(match)
+        query_length = len(query.name_ngrams)
+
+        if query.settlement:
+            query_ngrams = query.name_ngrams
+        else:
+            query_ngrams = query.name_ngrams | union_ngrams(settlement)
+
+        error_ngrams = query_ngrams.symmetric_difference(match_ngrams)
+        # error_ngrams = match_ngrams - query_ngrams
+        match_error = len(error_ngrams) / max(1, query_length) * (1 + 10/max(1, query_length))
+        # match_error = self._tfidf(non_query_ngrams | query_only_ngrams, self.missing_ngram_tfidf) / max_score
+
         return (
             NGramSearchResult(
                 query,
