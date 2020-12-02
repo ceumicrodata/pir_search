@@ -10,7 +10,7 @@ pylint = "*"
 vulture = "*"
 
 [packages]
-petl = "==1.1.0"
+petl = "==1.6.8"
 attrs = "==19.1.0"
 
 [requires]
